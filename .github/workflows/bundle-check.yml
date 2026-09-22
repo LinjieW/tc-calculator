@@ -1,0 +1,28 @@
+# The repo commits a GENERATED file: index.html is web/ folded into one page, and
+# GitHub Pages serves it directly. That means the one thing CI has to protect is
+# that the committed bundle still matches its source — edit web/ and forget to
+# run ./build.sh, and Pages keeps serving the old app with no error anywhere.
+name: bundle is up to date
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rebuild the bundle from web/
+        run: python3 tools/bundle.py web /tmp/index.html
+
+      - name: Compare against the committed index.html
+        run: |
+          if ! diff -q /tmp/index.html index.html; then
+            echo "::error::index.html is stale. Run ./build.sh and commit the result."
+            diff --unified=2 index.html /tmp/index.html | head -40
+            exit 1
+          fi
+          echo "index.html matches web/ ($(wc -c < index.html) bytes)"

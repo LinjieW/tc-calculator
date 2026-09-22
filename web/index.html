@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>加班与总薪酬测算</title>
+
+<!-- Theme BEFORE the stylesheets, inline and blocking. A deferred theme decision paints
+     one full frame of the wrong theme on every launch. -->
+<script>(function(){try{var t=localStorage.getItem("ui_theme");}catch(e){}
+document.documentElement.dataset.theme=t||((window.matchMedia&&matchMedia("(prefers-color-scheme: dark)").matches)?"dark":"light");}());</script>
+
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="components.css">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+
+<!-- Shown ONLY when scripts do not run — which is exactly the iOS Files /
+     Quick Look preview, and Mail's attachment preview. Those render HTML and CSS
+     but never execute JavaScript, and every figure on this page is computed at
+     load, so without this the page is a wall of "—" with no explanation. -->
+<noscript>
+  <div class="banner nojs">
+    <strong>这个页面需要 JavaScript，而现在它没有在运行。</strong>
+    所有数字都是打开时算出来的，所以你看到的是一堆占位符 —— 页面本身没坏。
+    iOS 的「文件」预览（Quick Look）和邮件附件预览都只渲染 HTML 和 CSS、不执行脚本；
+    iOS 18.5 之后 Safari 也不再允许直接打开本地 HTML 文件。
+    在 iPhone 上要用它，最省事的是把它放到一个网址上、用 Safari 打开。
+  </div>
+</noscript>
+
+<!-- ============ chrome ============ -->
+<div class="topbar">
+  <div class="topbar-inner">
+    <div class="topbar-brand">薪酬测算</div>
+    <div class="topbar-title" id="topbarTitle" aria-hidden="true"></div>
+    <div class="topbar-tools">
+      <div class="segmented" id="precToggle" role="group" aria-label="数值精度">
+        <button type="button" data-prec="0" aria-pressed="true">整数</button>
+        <button type="button" data-prec="2" aria-pressed="false">精确</button>
+      </div>
+      <button class="btn-ghost sm btn-icon" id="themeToggle" aria-label="切换深色 / 浅色主题" title="切换深色 / 浅色主题">
+        <svg class="icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.4"/><path d="M8 1.6a6.4 6.4 0 0 0 0 12.8z" fill="currentColor" stroke="none"/></svg>
+      </button>
+    </div>
+  </div>
+</div>
+
+<div class="subbar">
+  <!-- h-scroll (plus UIKit.edgeFade) rather than letting six Chinese labels wrap:
+       at 375px they each broke onto two lines and the bar doubled in height. The
+       kit's fade is state-driven, so it only dims a side that is really hiding
+       something. -->
+  <div class="subbar-inner h-scroll" id="subbarScroll">
+    <button class="btn-ghost sm quiet" type="button" data-jump="secDial">测算</button>
+    <button class="btn-ghost sm quiet" type="button" data-jump="secMix">构成</button>
+    <button class="btn-ghost sm quiet" type="button" data-jump="secTax">税后</button>
+    <button class="btn-ghost sm quiet" type="button" data-jump="secReverse">反查</button>
+    <button class="btn-ghost sm quiet" type="button" data-jump="secTable">明细表</button>
+    <button class="btn-ghost sm quiet" type="button" data-jump="secAssume">假设</button>
+  </div>
+</div>
+
+<main class="col">
+
+  <h1 class="page-title">加班与总薪酬测算</h1>
+  <p class="panel-note lede">
+    把加班费和固定年终奖一起，折算成「相当于多少比例的年终奖」<span class="pop-anchor" tabindex="0">i<span class="popover">（加班费 + 固定年终奖）÷ 基本工资。它把两笔钱当成一笔按基本工资计算的传统年终奖来看，方便和「涨 X% 年终奖」这类说法直接比较。</span></span>，并算出含雇主福利的总薪酬包。
+    所有假设都可以在下方修改，改完即时生效，并保存在本机。
+  </p>
+
+  <!-- ============ 一档 hero + 控制盘 ============ -->
+  <section id="secDial" class="hero-grid" aria-label="测算">
+    <div class="stat" id="heroCard">
+      <div class="lab">总薪酬包 · TOTAL PACKAGE</div>
+      <div class="big tnum" id="heroVal">—</div>
+      <div class="sub" id="heroSub">—</div>
+    </div>
+
+    <div class="panel dial">
+      <div class="panel-head"><div class="panel-title">加班小时</div></div>
+
+      <div class="slider-row">
+        <span class="sl-lab">年加班小时</span>
+        <input type="range" id="hSlider" min="0" max="625" step="1" value="250"
+               aria-label="年加班小时">
+        <span class="sl-val tnum" id="hSliderVal">250 h</span>
+      </div>
+      <div class="tick" id="hTicks"><span>0</span><span>—</span><span>—</span></div>
+
+      <div class="dial-fields">
+        <div class="field">
+          <label for="hExact"><span>精确小时数</span><span class="val">h / 年</span></label>
+          <input id="hExact" type="number" min="0" step="1" value="250" inputmode="numeric">
+        </div>
+        <div class="field">
+          <label for="hWeek"><span>折合每工作周</span><span class="val" id="hWeekUnit">h / 周</span></label>
+          <input id="hWeek" type="number" min="0" step="0.01" value="4.81" inputmode="decimal">
+        </div>
+      </div>
+      <p class="panel-note dial-note" id="dialNote">—</p>
+    </div>
+  </section>
+
+  <!-- ============ 二档 指标带 ============ -->
+  <div class="metric-band" id="band">
+    <div class="metric"><div class="lab">加班费</div><div class="val tnum" id="mOtPay">—</div><div class="note">OT pay</div></div>
+    <div class="metric"><div class="lab">变动薪酬</div><div class="val tnum" id="mVar">—</div><div class="note">加班费 + 年终奖</div></div>
+    <div class="metric"><div class="lab">等效年终奖</div><div class="val tnum" id="mEq">—</div><div class="note">占基本工资比例</div></div>
+    <div class="metric"><div class="lab">总现金薪酬</div><div class="val tnum" id="mCash">—</div><div class="note">基本工资 + 变动</div></div>
+  </div>
+
+  <!-- ============ 三档 里程碑条 ============ -->
+  <!-- Third tier: the strip's children are plain elements and the value is styled one
+       size class below the band (see design.md §7) — using .metric here would give them
+       the band's 24px and collapse the two tiers into one. -->
+  <div class="metric-strip">
+    <div><span class="s-lab nocase">401(k) 雇主匹配</span><span class="s-val tnum" id="sMatch">—</span></div>
+    <div><span class="s-lab">利润分享</span><span class="s-val tnum" id="sProfit">—</span></div>
+    <div><span class="s-lab">通讯补贴</span><span class="s-val tnum" id="sStipend">—</span></div>
+  </div>
+  <div class="metric-strip">
+    <div><span class="s-lab">标准时薪</span><span class="s-val tnum" id="sStd">—</span></div>
+    <div><span class="s-lab">加班时薪</span><span class="s-val tnum" id="sOt">—</span></div>
+    <div><span class="s-lab">雇主福利合计</span><span class="s-val tnum" id="sBenefit">—</span></div>
+  </div>
+  <div class="metric-strip">
+    <div><span class="s-lab">实际工作小时</span><span class="s-val tnum" id="sWorked">—</span></div>
+    <div><span class="s-lab">实际时薪</span><span class="s-val tnum" id="sEff">—</span></div>
+    <div><span class="s-lab">PTO 名义价值</span><span class="s-val tnum" id="sPto">—</span></div>
+  </div>
+
+  <div class="callout" id="warnBox" hidden></div>
+
+  <!-- ============ 构成 ============ -->
+  <section class="panel" id="secMix" aria-label="总薪酬包构成">
+    <div class="panel-head"><div class="panel-title">总薪酬包的构成</div></div>
+    <div class="mix">
+      <!-- A donut, not a pie: the hole is where the total goes, which is the one
+           number the whole chart exists to explain. -->
+      <div class="chart-slot">
+        <svg class="chart" id="mixChart" viewBox="0 0 240 240" role="img"
+             aria-label="总薪酬包构成" aria-describedby="mixDesc"></svg>
+      </div>
+      <ul class="mix-legend tnum" id="mixLegend"></ul>
+    </div>
+    <p class="panel-note" id="mixDesc">各块之和严格等于中间的总薪酬包。「PTO」是从基本工资里切出来的——两块加起来才是全额基本工资，不是额外的钱。指向任意一块（或用键盘聚焦右边的行），那一块会弹出来、其余变暗；点一下钉住，Esc 取消。</p>
+  </section>
+
+  <!-- ============ 税后 ============ -->
+  <!-- Entirely additive: nothing above this point reads any of it, so the
+       pre-tax model stays exactly what the workbook says. -->
+  <section class="panel" id="secTax" aria-label="税后到手">
+    <div class="panel-head">
+      <div class="panel-title">税后到手</div>
+      <div class="head-tools"><span class="tax-year" id="taxYearTag">2026 税率</span></div>
+    </div>
+    <p class="panel-note">
+      单身申报，不考虑逐项扣除、抵免、州外收入和其他所得。这是一个估算，不是报税结论。
+      所有税率、档位和上限都可以在下面的「税表与参数」里改——每年查到新数字自己更新即可。
+    </p>
+
+    <div class="metric-band" id="taxBand">
+      <div class="metric"><div class="lab">到手现金</div><div class="val tnum" id="tHome">—</div><div class="note">扣完税与供款</div></div>
+      <div class="metric"><div class="lab">税负合计</div><div class="val tnum" id="tTax">—</div><div class="note">联邦 + DC + FICA</div></div>
+      <div class="metric"><div class="lab">有效税率</div><div class="val tnum" id="tEff">—</div><div class="note">占总现金薪酬</div></div>
+      <div class="metric"><div class="lab">边际税率</div><div class="val tnum" id="tMarg">—</div><div class="note">下一美元</div></div>
+    </div>
+
+    <!-- The same "per hour actually worked" idea as the pre-tax strip, after tax.
+         PTO is inside the divisor here too: these are hours WORKED. -->
+    <div class="metric-strip">
+      <div><span class="s-lab">税后实际时薪</span><span class="s-val tnum" id="tEffHourly">—</span></div>
+      <div><span class="s-lab">每加班小时净得</span><span class="s-val tnum" id="tOtNet">—</span></div>
+      <div><span class="s-lab">税后每工作周</span><span class="s-val tnum" id="tPerWeek">—</span></div>
+    </div>
+
+    <div class="tax-grid">
+      <div class="tax-col">
+        <div class="tax-sub">税前供款</div>
+        <div class="field">
+          <label for="c401k"><span>401(k) 员工供款</span><span class="val" id="c401kCap">上限 24,500</span></label>
+          <input id="c401k" type="number" min="0" step="500" inputmode="decimal">
+        </div>
+        <div class="field">
+          <label for="cHsa"><span>HSA 供款</span><span class="val" id="cHsaCap">上限 4,400</span></label>
+          <input id="cHsa" type="number" min="0" step="100" inputmode="decimal">
+        </div>
+        <div class="field check">
+          <input id="cHsaPayroll" type="checkbox">
+          <label for="cHsaPayroll">HSA 走工资扣除（同时免 FICA）</label>
+        </div>
+        <div class="field">
+          <label for="cIra"><span>传统 IRA 供款</span><span class="val" id="cIraCap">上限 7,500</span></label>
+          <input id="cIra" type="number" min="0" step="500" inputmode="decimal">
+        </div>
+        <p class="panel-note tax-hint" id="iraHint" hidden></p>
+      </div>
+
+      <div class="tax-col">
+        <div class="tax-sub">口径开关</div>
+        <div class="field">
+          <label><span>FICA（社保 + 医保）</span><span class="val" id="ficaNote">计入</span></label>
+          <div class="segmented" id="ficaToggle" role="group" aria-label="是否计算 FICA">
+            <button type="button" data-on="1" aria-pressed="true">计入</button>
+            <button type="button" data-on="0" aria-pressed="false">不计</button>
+          </div>
+        </div>
+        <div class="field">
+          <label><span>OBBBA 加班免税</span><span class="val" id="otDedNote">计入</span></label>
+          <div class="segmented" id="otDedToggle" role="group" aria-label="是否计算 OBBBA 加班扣除">
+            <button type="button" data-on="1" aria-pressed="true">计入</button>
+            <button type="button" data-on="0" aria-pressed="false">不计</button>
+          </div>
+        </div>
+        <p class="panel-note tax-hint" id="otDedHint">—</p>
+      </div>
+    </div>
+
+    <div class="table-scroll">
+      <table class="table stack" id="waterfall">
+        <thead><tr><th>项目</th><th>金额</th><th>占总现金薪酬</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <details class="disclosure tax-params">
+      <summary>税表与参数<span class="disclosure-plus">+</span></summary>
+      <div class="disclosure-body">
+        <p class="panel-note">
+          预填的是 2026 年的数字（联邦档位与标准扣除来自 IRS Rev. Proc. 2025-32；
+          DC 档位自 2022 年起未变；社保工资上限来自 SSA；供款上限来自 IRS）。
+          每年新数字出来之后，直接在这里改。
+        </p>
+
+        <div class="tax-grid">
+          <div class="tax-col">
+            <div class="tax-sub">联邦 <span class="tax-sub-note">taxable = AGI − 标准扣除 − 加班扣除</span></div>
+            <div class="field">
+              <label for="fedStd"><span>联邦标准扣除</span><span class="val">$</span></label>
+              <input id="fedStd" type="number" min="0" step="100" inputmode="decimal">
+            </div>
+            <table class="table bracket-table" id="fedBrackets">
+              <thead><tr><th>该档上限 ($)</th><th>税率 (%)</th><th><span class="sr-only">操作</span></th></tr></thead>
+              <tbody></tbody>
+            </table>
+            <button class="btn-ghost sm quiet" type="button" data-addrow="fed">加一档</button>
+          </div>
+
+          <div class="tax-col">
+            <div class="tax-sub">DC <span class="tax-sub-note">taxable = AGI − DC 标准扣除</span></div>
+            <div class="field">
+              <label for="dcStd"><span>DC 标准扣除</span><span class="val">$</span></label>
+              <input id="dcStd" type="number" min="0" step="100" inputmode="decimal">
+            </div>
+            <table class="table bracket-table" id="dcBrackets">
+              <thead><tr><th>该档上限 ($)</th><th>税率 (%)</th><th><span class="sr-only">操作</span></th></tr></thead>
+              <tbody></tbody>
+            </table>
+            <button class="btn-ghost sm quiet" type="button" data-addrow="dc">加一档</button>
+          </div>
+        </div>
+
+        <div class="tax-sub">FICA 与 OBBBA</div>
+        <div class="assume-grid">
+          <div class="field">
+            <label for="ssRate"><span>社保税率</span><span class="val">%</span></label>
+            <input id="ssRate" type="number" min="0" step="0.1" inputmode="decimal">
+          </div>
+          <div class="field">
+            <label for="ssBase"><span>社保工资上限</span><span class="val">$</span></label>
+            <input id="ssBase" type="number" min="0" step="100" inputmode="decimal">
+          </div>
+          <div class="field">
+            <label for="medRate"><span>医保税率</span><span class="val">%</span></label>
+            <input id="medRate" type="number" min="0" step="0.05" inputmode="decimal">
+          </div>
+          <div class="field">
+            <label for="addMedRate"><span>附加医保税率</span><span class="val">%</span></label>
+            <input id="addMedRate" type="number" min="0" step="0.1" inputmode="decimal">
+          </div>
+          <div class="field">
+            <label for="addMedThr"><span>附加医保起征点</span><span class="val">$</span></label>
+            <input id="addMedThr" type="number" min="0" step="1000" inputmode="decimal">
+          </div>
+          <div class="field">
+            <label for="otCap"><span>加班扣除上限</span><span class="val">$</span></label>
+            <input id="otCap" type="number" min="0" step="500" inputmode="decimal">
+          </div>
+          <div class="field">
+            <label for="otPhase"><span>加班扣除退坡起点</span><span class="val">MAGI $</span></label>
+            <input id="otPhase" type="number" min="0" step="5000" inputmode="decimal">
+          </div>
+          <div class="field">
+            <label for="c401kLimit"><span>401(k) 上限</span><span class="val">$</span></label>
+            <input id="c401kLimit" type="number" min="0" step="500" inputmode="decimal">
+          </div>
+          <div class="field">
+            <label for="hsaLimit"><span>HSA 上限</span><span class="val">$</span></label>
+            <input id="hsaLimit" type="number" min="0" step="50" inputmode="decimal">
+          </div>
+          <div class="field">
+            <label for="iraLimit"><span>IRA 上限</span><span class="val">$</span></label>
+            <input id="iraLimit" type="number" min="0" step="500" inputmode="decimal">
+          </div>
+          <div class="field">
+            <label for="taxYear"><span>税表年度</span><span class="val">年</span></label>
+            <input id="taxYear" type="number" min="2000" step="1" inputmode="numeric">
+          </div>
+        </div>
+
+        <div class="head-tools tax-reset">
+          <button class="btn-ghost sm quiet" type="button" id="taxResetBtn">恢复 2026 默认税表</button>
+        </div>
+      </div>
+    </details>
+  </section>
+
+  <!-- ============ 反查 ============ -->
+  <section class="panel" id="secReverse" aria-label="反查">
+    <div class="panel-head"><div class="panel-title">反查：想拿到等效年终奖，需要加多少班</div></div>
+
+    <div class="rev-row">
+      <div class="field">
+        <label for="revPct"><span>目标等效年终奖</span><span class="val">% of base</span></label>
+        <input id="revPct" type="number" min="0" step="0.5" value="25" inputmode="decimal">
+      </div>
+      <div class="readout rev-out">
+        <div class="lab">需要加班</div>
+        <div class="num tnum" id="revHours">—</div>
+        <div class="sub" id="revSub">—</div>
+      </div>
+    </div>
+
+    <div class="table-scroll">
+      <table class="table stack" id="revTable">
+        <thead><tr><th>目标 %</th><th class="nocase">需要加班 (h)</th><th class="nocase">折合每周 (h)</th><th>届时总薪酬包</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <p class="panel-note">公式与原表一致：<span class="code-inline">ROUND(MAX(0,(目标% × 基本工资 − 年终奖) / 加班时薪), 0)</span>。点任意一行可把上面的测算跳到该小时数。</p>
+  </section>
+
+  <!-- ============ 明细表 ============ -->
+  <section class="panel" id="secTable" aria-label="明细表">
+    <div class="panel-head">
+      <div class="panel-title">明细表</div>
+      <div class="head-tools">
+        <button class="btn-ghost sm" type="button" id="copyBtn">复制表格</button>
+        <button class="btn-ghost sm" type="button" id="csvBtn">导出 CSV</button>
+        <button class="btn-ghost sm" type="button" id="printBtn">打印 / PDF</button>
+      </div>
+    </div>
+    <div class="table-scroll">
+      <table class="table stack" id="schedTable">
+        <thead><tr>
+          <th class="nocase">加班 (h)</th><th>加班费</th><th>变动薪酬</th><th>等效年终奖</th>
+          <th>总现金薪酬</th><th class="nocase">401(k) 匹配</th><th>利润分享</th><th>通讯补贴</th><th>总薪酬包</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <p class="panel-note">当前选中的小时数所在行高亮；点任意一行可切换过去。</p>
+  </section>
+
+  <!-- ============ 假设 ============ -->
+  <section class="panel" id="secAssume" aria-label="假设">
+    <div class="panel-head">
+      <div class="panel-title">假设</div>
+      <div class="head-tools">
+        <button class="btn-ghost sm quiet" type="button" id="resetBtn">恢复默认</button>
+      </div>
+    </div>
+    <p class="panel-note">全部来自原表 Backup 工作表的「可编辑假设」。改动即时生效并保存在本机。</p>
+
+    <div class="assume-grid">
+      <div class="field">
+        <label for="aBase"><span>基本工资</span><span class="val">$ / 年</span></label>
+        <input id="aBase" type="number" min="0" step="1000" inputmode="decimal">
+      </div>
+      <div class="field">
+        <label for="aHours"><span>标准年工时</span><span class="val">h / 年</span></label>
+        <input id="aHours" type="number" min="1" step="10" inputmode="decimal">
+      </div>
+      <div class="field">
+        <label for="aMult"><span>加班倍率</span><span class="val">×</span></label>
+        <input id="aMult" type="number" min="0" step="0.1" inputmode="decimal">
+      </div>
+      <div class="field">
+        <label for="aBonus"><span>年终奖（固定）</span><span class="val">$ / 年</span></label>
+        <input id="aBonus" type="number" min="0" step="500" inputmode="decimal">
+      </div>
+      <div class="field">
+        <label for="aMatch"><span>401(k) 雇主匹配</span><span class="val" id="aMatchUnit">% of 基本 + 加班费</span></label>
+        <input id="aMatch" type="number" min="0" step="0.5" inputmode="decimal">
+      </div>
+      <!-- Plan documents differ on whether overtime counts as eligible compensation
+           for the employer match, and it moves the number by real money, so it is a
+           setting rather than an assumption baked into the formula. The workbook
+           includes OT (F22 = $B$9*($B$5+B22)); that stays the default. -->
+      <div class="field">
+        <label><span>匹配的计算基数</span><span class="val" id="matchBaseNote">跟随原表</span></label>
+        <!-- Short labels on purpose: the field label above already says what is
+             being chosen, and at three columns a longer pair forces this field to
+             span two, which leaves a hole in the grid. -->
+        <div class="segmented" id="matchBaseToggle" role="group" aria-label="401(k) 匹配的计算基数">
+          <button type="button" data-mot="1" aria-pressed="true">含加班费</button>
+          <button type="button" data-mot="0" aria-pressed="false">仅基本工资</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="aProfit"><span>利润分享</span><span class="val">% of 基本工资</span></label>
+        <input id="aProfit" type="number" min="0" step="0.5" inputmode="decimal">
+      </div>
+      <div class="field">
+        <label for="aStipend"><span>通讯补贴</span><span class="val">$ / 年</span></label>
+        <input id="aStipend" type="number" min="0" step="100" inputmode="decimal">
+      </div>
+      <div class="field">
+        <label for="aPto"><span>PTO（带薪休假）</span><span class="val">h / 年</span></label>
+        <input id="aPto" type="number" min="0" step="8" inputmode="decimal">
+      </div>
+      <div class="field">
+        <label for="aMax"><span>明细表上限</span><span class="val">h / 年</span></label>
+        <input id="aMax" type="number" min="25" step="25" inputmode="decimal">
+      </div>
+      <div class="field">
+        <label for="aStep"><span>显示步长</span><span class="val">h</span></label>
+        <select id="aStep">
+          <option value="10">10 小时</option>
+          <option value="25">25 小时</option>
+          <option value="50">50 小时</option>
+          <option value="100">100 小时</option>
+        </select>
+      </div>
+    </div>
+  </section>
+
+  <details class="disclosure">
+    <summary>口径说明<span class="disclosure-plus">+</span></summary>
+    <div class="disclosure-body">
+      <p class="panel-note">「等效年终奖 %」把加班费与固定年终奖合并，视作一笔传统的、按基本工资计算的年终奖。</p>
+      <p class="panel-note">总薪酬包 = 总现金薪酬 + 401(k) 雇主匹配 + 利润分享 + 通讯补贴。<strong>不含</strong>员工本人的 401(k) / HSA 供款。</p>
+      <p class="panel-note">401(k) 匹配的计算基数可切换。原表按「基本工资 + 加班费」计算；如果你的计划文件把加班费排除在 eligible compensation 之外，切到「仅基本工资」，匹配额就不再随加班增长。切成后者时结果会与原表不一致，页面上会标出来。</p>
+      <p class="panel-note">这只是现金薪酬与雇主福利的比较。加班需要额外付出工时，这一点和传统年终奖不同。利润分享按当年经济价值计入，即使次年 3、4 月才发放。</p>
+      <p class="panel-note"><strong>关于 PTO</strong>：带薪休假不改变任何一个金额——它本来就含在基本工资里，所以基本工资、加班费、总薪酬包、401(k) 匹配和全部税额，加不加 PTO 都一样。加班时薪仍然按 <span class="code-inline">基本工资 ÷ 标准年工时</span> 算（这是薪资口径：除数是「工资覆盖的小时数」，PTO 不缩小它；除以 1,920 会把加班时薪算高）。PTO 真正改变的是两件事：<strong>实际每工作一小时值多少</strong>（总现金 ÷ 扣掉 PTO、加上加班的实际工时），以及<strong>加班要挤进多少周</strong>——四周 PTO 意味着只有 48 个工作周，同样 250 小时加班就从每周 4.8 变成 5.2 小时。</p>
+      <p class="panel-note">全部数值口径与 <span class="code-inline">OT_Compensation_Total_Package_Exhibit.xlsx</span> 的 Backup 工作表一致。税后板块是额外加的，原表里没有。</p>
+      <p class="panel-note"><strong>税后板块的口径</strong>：单身申报、只用标准扣除。401(k) 减联邦和 DC 的应税收入但<strong>不减 FICA</strong>；HSA 走工资扣除时连 FICA 一起减，不走工资扣除则只减所得税。OBBBA 加班扣除只作用于<strong>联邦所得税</strong>，只针对加班费里「一倍以上」的那部分溢价，按 MAGI 超过起点每 1,000 美元递减 100 美元（不足 1,000 按 1,000 计），DC 不跟随。传统 IRA 在有公司退休计划且收入较高时通常<strong>不可抵扣</strong>，页面会提示，但不会替你判断。</p>
+    </div>
+  </details>
+
+</main>
+
+<div class="toast hidden" id="toast"></div>
+
+<script src="motion.js"></script>
+<script src="ui.js"></script>
+<script src="select-menu.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,382 @@
+/* ============================================================
+   apple-ui-kit · LAYER 1 — tokens.css
+   System fonts only. Zero dependencies, zero network requests.
+   Drop it into a plain HTML page and it works.
+
+   This layer owns, and nothing else may own:
+     - the token values (color / type / radius / space / shadow / chart)
+     - the light and dark themes
+     - the universal reset and the base html/body styles
+     - the accessibility & preference media queries
+     - the print theme
+
+   THE RULE: a reskin swaps VALUES, never NAMES. Every later layer and
+   every app built on this kit references tokens by name only, so a new
+   product identity is this one file re-valued — no component is touched.
+   Corollary: do not add a token name that is not in the contract, and do
+   not keep an app-specific alias (--brand-plum, --ch-sales) next to the
+   canonical name. An alias is a name, and names are the frozen part.
+
+   The palette below is CALIBRATED, not arbitrary: warm greige surfaces,
+   a dusty slate-blue tint, and Morandi-muted semantic/categorical hues,
+   tuned against a real app in both themes. Treat the specific values as
+   a starting point worth keeping until you have a reason.
+
+   RUNTIME TOKENS. Three names are written by JS at runtime and are
+   deliberately NOT declared here:
+     --topbar-h  sticky-chrome height, measured (chrome height changes
+                 when it wraps at narrow widths)
+     --fill      slider fill percentage
+     --hx        popover viewport-clamp shift, in px
+   They stay undeclared so that every use site can carry its own
+   var(--topbar-h,55px) fallback — declaring them in :root would shadow
+   the fallback and the page would render wrong before JS runs, instead
+   of rendering acceptably.
+   ============================================================ */
+
+:root{
+  /* Tell the UA which way this theme runs, so form controls, scrollbars and the canvas
+     behind the page follow the theme toggle instead of staying light. */
+  color-scheme:light;
+
+  /* ---- type: SF Pro on macOS, PingFang SC for zh, system-ui elsewhere ---- */
+  --font-text:-apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC",system-ui,sans-serif;
+  --font-display:-apple-system,BlinkMacSystemFont,"SF Pro Display","PingFang SC",system-ui,sans-serif;
+  /* Numbers are PROPORTIONAL + tabular-nums, not monospace. Apple's own data apps
+     (Stocks/Health/Fitness) set figures in SF Pro with tnum; SF Mono reads as code /
+     Bloomberg terminal and is the single strongest "not an Apple app" tell in a
+     number-dense UI. Proportional figures still align in columns once tnum is on —
+     see .tnum below. */
+  --font-num:-apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC",system-ui,sans-serif;
+  --font-code:ui-monospace,"SF Mono",Menlo,monospace;   /* genuine code only: log output, raw JSON */
+
+  /* ---- tint: the ONE interaction color. Buttons, links, selection, focus ring. ---- */
+  --tint:#566A88;          /* dusty slate-blue, a touch more confident than the surfaces
+                              around it so it reads as interactive rather than decorative */
+  --tint-strong:#455673;   /* pressed / hover-deepened */
+  --on-tint:#FFFFFF;       /* text and icons sitting ON a tint fill */
+
+  /* ---- surfaces: page ground, floating card, recessed well ---- */
+  --bg-base:#EAE7E1;       /* warm greige page ground */
+  --bg-elevated:#FCFBF9;   /* a CLEAN warm-white card, light enough to float off the ground */
+  --bg-inset:#F2EFE9;      /* a well pressed INTO a card: between base and elevated (see dark) */
+
+  /* ---- ink: warm grays, never neutral #333/#666/#999 on a warm ground ---- */
+  --label:#37342F;
+  --label-2:#767168;
+  --label-3:#ABA69C;
+  --ink-number:#2A2823;    /* near-ink, reserved for the celebrated number in a hero/metric */
+
+  /* ---- lines ---- */
+  --separator:rgba(60,54,44,.15);         /* hairline between rows; should almost disappear */
+  --separator-strong:rgba(60,54,44,.24);  /* one step up, for a line that must be SEEN as a
+                                             thing: control tracks, tick marks, inactive dots */
+
+  /* ---- state: muted, but never so muted that warn blurs into bad ---- */
+  --good:#6F8A5F;   /* sage — slightly deeper than its dark counterpart, for legibility on white */
+  --warn:#BD985C;   /* ochre */
+  --bad:#AF746A;    /* terracotta */
+
+  /* ---- accents: CATEGORICAL, for data dimensions / scenes. Not state. ----
+     Kept off the red/orange axis on purpose so an accent can never be misread as
+     warn or bad. Green<->mauve also survives the common color-vision deficiencies.
+     NO CONSUMER IN THIS KIT — like the --chart-* family below, these are a palette
+     for YOUR code to read; see the chart note for what that means in practice. */
+  /* ---- LOCAL RE-VALUATION (values only, no new names — see README) ----
+     Shipped, these three duplicated --chart-1/2/3 exactly, which left the kit with
+     three usable categorical hues. The composition donut needs six, and its
+     remaining option — the pale *-band tints — sits too close to the card it is
+     drawn on to read as a slice. Re-valued here to three more Morandi hues that
+     are well separated from the chart trio AND from the surfaces: dusty aqua,
+     muted coral and slate blue. Re-apply this block if the kit is ever updated. */
+  --accent-1:#5C8A87;   /* dusty aqua */
+  --accent-2:#C2765A;   /* muted coral — deliberately redder than --warn's ochre
+                           (#BD985C) so a data slice cannot be read as a warning */
+  --accent-3:#6C82A4;   /* slate blue */
+
+  /* ---- radius ----
+     Calibrated toward Apple's actual radii (larger/softer than the web's usual 4-6px).
+     True squircles need an SVG mask per element, which would clip the box-shadows that
+     carry our depth — not worth it.
+
+     SPARE STEPS ARE DELIBERATE. --radius-xs and --radius-pill here, and --space-1 /
+     --space-8 below, are read by NO component in this kit. They are kept because they
+     complete the scale, and a scale with a hole in it is worse than a scale with a
+     spare step: the hole is what makes the next person write a bare 4px or 32px, and
+     a literal is exactly the thing a reskin cannot re-value. Reach for them freely in
+     your own components. */
+  --radius-xs:4px;      /* micro-badges, swatches — no consumer in this kit */
+  --radius-s:9px;       /* inputs, small buttons, chips */
+  --radius-m:14px;      /* cards, callouts */
+  --radius-l:18px;      /* sheets, large panels */
+  --radius-pill:999px;  /* a fully-round element of YOUR OWN — a pill badge, a round icon
+                           button. Nothing in this kit reads it: .segmented takes
+                           --radius-s and .toast takes --radius-m, both as the source
+                           design has them. That is not an oversight to "fix" by
+                           pillifying them. */
+
+  /* ---- space: a 4pt grid. Nothing between these steps. ----
+     --space-1 and --space-8 have no consumer in this kit; see the radius note above. */
+  --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px; --space-6:24px; --space-8:32px;
+
+  /* ---- shadow ----
+     Warm and LAYERED (a tight contact shadow plus a wide ambient one) so a card
+     genuinely lifts off the greige. A single flat rgba(0,0,0,x) reads as a smudge
+     under the box rather than as light falling around it — and pure black tints the
+     warm ground gray at the edges. */
+  --shadow-1:0 1px 2px rgba(58,48,33,.05), 0 3px 8px rgba(58,48,33,.07);      /* clickable card at rest */
+  --shadow-2:0 2px 6px rgba(58,48,33,.06), 0 10px 26px rgba(58,48,33,.12);    /* popover, floating layer */
+  --shadow-3:0 8px 24px rgba(58,48,33,.10), 0 26px 60px rgba(58,48,33,.22);   /* sheet, modal */
+  --shadow-hover:0 2px 6px rgba(58,48,33,.07), 0 14px 32px rgba(58,48,33,.15);
+
+  /* ---- chart ----
+     THIS KIT DRAWS NOTHING. There is no chart component, no canvas helper and no SVG
+     builder anywhere in it, and these 13 names plus --accent-1/2/3 above have no
+     consumer inside the kit by design. They are a CALIBRATED CATEGORICAL PALETTE for
+     YOUR OWN drawing code — hand-written SVG, a canvas renderer, or the theme object
+     of whatever chart library you bring — so that a chart lands in the same color
+     world as the components instead of arriving in library-default blue.
+
+     Read them with getComputedStyle(document.documentElement).getPropertyValue(...)
+     for canvas, or put var(--chart-1) straight into an SVG fill/stroke. The SVG route
+     is the better one: a theme switch then recolors an ALREADY-RENDERED chart with no
+     re-render and no JS at all — which is the whole reason these live in CSS rather
+     than in a JS palette constant.
+
+     Each series is a line color plus two band tints (e.g. an 80% and a 95% interval);
+     band2 is the wider, fainter one. The two band steps exist so that a confidence
+     band reads at the SAME visual separation in both themes — in light they step down
+     from the series color, in dark they are re-stepped UP off the panel ground (see
+     the dark block). Deriving them at runtime with one opacity does not survive the
+     theme flip; that is why they are tokens and not an alpha. */
+  --chart-ink:#6F6A61;                /* chart labels / data text */
+  --chart-grid:rgba(60,54,44,.09);    /* gridlines: present, not competing with the data */
+  --chart-axis:rgba(60,54,44,.16);    /* axis lines: one step stronger than grid */
+  --chart-muted:#A29C92;              /* de-emphasized / reference series */
+  --chart-1:#7E9070; --chart-1-band:#CBD3BF; --chart-1-band2:#E1E6D8;
+  --chart-2:#93859B; --chart-2-band:#D5CCD8; --chart-2-band2:#E8E2EA;
+  --chart-3:#B29868; --chart-3-band:#E1D4BB; --chart-3-band2:#EFE7D5;
+}
+
+*{margin:0;padding:0;box-sizing:border-box}
+
+/* ============ DARK — a designed remap, never an inversion ============ */
+/* Selected by :root[data-theme="dark"], i.e. an explicit attribute, not
+   prefers-color-scheme. The app decides (persisted toggle, OS preference read once at
+   boot, or both); this sheet only defines what dark LOOKS like. */
+:root[data-theme="dark"]{
+  color-scheme:dark;
+
+  --tint:#8FA6C6; --tint-strong:#A6BAD6;   /* bluer and brighter: the light tint is too close
+                                              to charcoal to read as interactive on it */
+  --on-tint:#211F1C;
+
+  /* Dark is charcoal, not black: macOS dark windows live near #1E-#28. With resting cards
+     flat (shadows do almost nothing on a dark ground), the base -> inset -> elevated
+     LIGHTNESS LADDER is the whole depth story, so the steps are deliberately wide and the
+     floor never approaches pure black.
+     inset sits BETWEEN base and elevated so a nested well RECESSES below its card exactly
+     as it does in light. Putting inset above elevated (the intuitive "wells are lighter in
+     dark" move) inverts depth with the theme: the same well reads as pressed-in in light
+     and as the most-forward element in dark. Ladder: page #1D < well #24 < card #2B. */
+  --bg-base:#1D1B19; --bg-inset:#242220; --bg-elevated:#2B2925;
+
+  --label:#EDE9E1; --label-2:#ACA79D;
+  --label-3:#8A857B;                       /* lifted off a literal remap: 11px metadata in the
+                                              tertiary color must stay readable on charcoal */
+  --ink-number:#F5F1E9;
+
+  --separator:rgba(240,236,228,.15);
+  --separator-strong:rgba(240,236,228,.20);
+
+  --good:#98AA86; --warn:#CBA869; --bad:#C48A7E;
+  /* Local re-valuation, dark half — lifted off the charcoal ground, same hues. */
+  --accent-1:#7FA7A4; --accent-2:#D4907A; --accent-3:#8A9EBF;
+
+  --shadow-1:0 1px 3px rgba(0,0,0,.45), 0 4px 12px rgba(0,0,0,.35);
+  --shadow-2:0 4px 16px rgba(0,0,0,.5);
+  --shadow-3:0 12px 40px rgba(0,0,0,.62);
+  --shadow-hover:0 6px 22px rgba(0,0,0,.5);
+
+  --chart-ink:#ACA79D; --chart-grid:rgba(240,236,228,.10);
+  --chart-axis:rgba(240,236,228,.17); --chart-muted:#948F85;
+  /* Bands are re-stepped against the lifted panel background (#2B2925), not darkened from
+     the light values — darkening them collapses band and band2 into the panel. */
+  --chart-1:#93A583; --chart-1-band:#46523F; --chart-1-band2:#37412F;
+  --chart-2:#AB9DB1; --chart-2-band:#4F4652; --chart-2-band2:#3C3540;
+  --chart-3:#C6AC7C; --chart-3-band:#544B3B; --chart-3-band2:#423A28;
+}
+
+/* ============================================================
+   SURFACE HOOKS — .surface / [data-elevated] / .material / [data-material] / [data-scrim]
+
+   Four rules in this file are cross-cutting: they are about what a SURFACE does, not
+   about what any one component is. They are the dark rim just below, the
+   reduced-transparency swap, the prefers-contrast borders, and the print border.
+
+   These five selectors are the OPT-IN PATH FOR SURFACES YOU ADD LATER. Nothing in this
+   kit wears them — components.css covers the kit's OWN components by enumerating them
+   by name (.panel, .card, .card-select, .topbar, .subbar, .popover, .tip, ...), and its
+   copies of these same four rules are the ones that render today. That pairing is
+   deliberate, not duplication:
+
+     components.css  — a closed, known list. The kit's components, which do not change
+                       without someone editing that file anyway.
+     tokens.css      — this open hook. Your surfaces, which this file cannot enumerate
+                       because it has never seen them.
+
+   So: adding an elevated surface of your own? Put .surface (or data-elevated, for
+   markup you generate) on it and it inherits all four behaviours at once. Do NOT go
+   append your class to components.css's lists — that is the list this warning is about:
+   AN ENUMERATED LIST ROTS. Every component added after it was written starts out
+   missing its rim, its opaque fallback, its contrast border and its print edge, and
+   each omission only shows up in one theme or one preference, which is where a missing
+   rim can sit unnoticed for a long time.
+   ============================================================ */
+
+/* Apple dark elevation: a raised surface catches a faint light rim along its edge. With
+   shadows doing almost nothing on charcoal, this half-pixel ring is what keeps a flat card
+   legible AS a card. (components.css carries the same rim for .panel/.card by name.) */
+:root[data-theme="dark"] .surface,
+:root[data-theme="dark"] [data-elevated]{box-shadow:0 0 0 .5px rgba(240,236,228,.08)}
+/* This rim rule outranks a component's own hover/selected box-shadow, so those states must
+   RECOMPOSE on top of the rim rather than replace it — otherwise hovering a card in dark
+   silently deletes its edge. */
+:root[data-theme="dark"] .surface:hover,
+:root[data-theme="dark"] [data-elevated]:hover{box-shadow:0 0 0 .5px rgba(240,236,228,.12),var(--shadow-1)}
+
+/* ============ base elements ============ */
+/* scroll-padding-top keeps anchor jumps clear of sticky chrome. --topbar-h is measured by
+   JS because the chrome's height changes with the viewport (it wraps at narrow widths);
+   the fallback is its desktop height, so anchors are merely imperfect before JS runs. */
+html{scroll-behavior:smooth;scroll-padding-top:calc(var(--topbar-h,55px) + 48px)}
+body{
+  background:var(--bg-base); color:var(--label);
+  font-family:var(--font-text); font-size:15px; line-height:1.5;
+  -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;
+  font-feature-settings:"kern" 1,"liga" 1;
+}
+
+/* Figures are proportional (see --font-num), so tabular-nums is what does the aligning.
+   Apply .tnum wherever numbers sit in columns or UPDATE IN PLACE — tables, metrics,
+   readouts, chart labels, number inputs, live counters. A figure that changes width as it
+   ticks makes the whole row twitch; that is the failure this prevents. */
+.tnum{font-variant-numeric:tabular-nums}
+
+/* The dark<->light flip is a brightness jump and must cross-fade, not flash.
+   ARMED BY JS for ~380ms around the toggle ONLY. Scoping it to that window is the point:
+   left on permanently, this !important blanket would override every component's own
+   carefully tuned transition (a 120ms popover would fade for 320ms) and would make any
+   color change anywhere in the app feel laggy.
+
+     const r = document.documentElement;
+     r.classList.add("theme-easing"); clearTimeout(r._themeT);
+     r._themeT = setTimeout(() => r.classList.remove("theme-easing"), 380);
+*/
+:root.theme-easing body,:root.theme-easing body *{
+  transition:background-color .32s ease,color .32s ease,border-color .32s ease,box-shadow .32s ease!important}
+
+/* ============ accessibility & user preferences ============ */
+
+/* Keyboard focus ring. :focus-visible only, so a mouse click on a button does not leave a
+   ring behind while inputs keep their own :focus treatment. */
+a:focus-visible,button:focus-visible,summary:focus-visible,
+[tabindex]:focus-visible,[role="slider"]:focus-visible{outline:2px solid var(--tint);outline-offset:2px}
+
+/* REDUCED != NONE. The usual *{transition:none;animation:none} hammer is wrong: it strips
+   the feedback that tells you a click registered, leaves entrance keyframes stuck at their
+   FROM state (a view animating in from opacity:0 never appears), and freezes spinners.
+   What actually bothers a motion-sensitive user is TRAVEL — things flying across the
+   screen. So: drop transform/filter from the transition property list, keep opacity and
+   color feedback at a short duration, collapse one-shot keyframes to their end state, and
+   let looping loading indicators keep spinning. */
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{
+    scroll-behavior:auto!important;
+    transition-property:opacity,color,background-color,border-color,box-shadow,fill!important;
+    transition-duration:.16s!important;
+    animation-duration:.01ms!important;      /* every keyframe animation jumps to its end state */
+    animation-delay:0ms!important;
+  }
+  /* loading indicators are information, not decoration — they keep going */
+  .spinner,[data-spin],.is-loading{animation-duration:.7s!important}
+}
+
+/* Translucent material -> opaque fill. Surface hooks (see above): .material /
+   [data-material] / [data-scrim] are for your own translucent panes. components.css
+   runs the same swap for the kit's .topbar / .subbar / .popover / .tip / .scrim. */
+@media (prefers-reduced-transparency:reduce){
+  /* The :root prefix is not decoration: it lifts specificity above the component's own base
+     rule. A component that sets its translucent background LATER in the stylesheet at equal
+     specificity wins on source order, and the bar stays translucent despite the preference.
+     Prefixing :root makes this rule strictly more specific regardless of where it sits. */
+  :root .material,:root [data-material]{
+    backdrop-filter:none;-webkit-backdrop-filter:none;background:var(--bg-elevated)}
+  /* scrim: drop the blur, deepen the dim so a modal still separates from the page */
+  :root .scrim,:root [data-scrim]{backdrop-filter:none;-webkit-backdrop-filter:none;background:rgba(28,24,18,.6)}
+  /* Same trap one level up: the dark theme sets material backgrounds through a
+     HIGHER-specificity selector (:root[data-theme="dark"] .material), which beats the rule
+     above and leaves the chrome translucent in dark only. Match that specificity to land a
+     genuinely opaque fill in both themes. */
+  :root[data-theme="dark"] .material,
+  :root[data-theme="dark"] [data-material]{
+    backdrop-filter:none;-webkit-backdrop-filter:none;background:var(--bg-elevated)}
+}
+
+/* This system separates surfaces with background steps and space instead of borders.
+   Under prefers-contrast:more that separation is exactly what is too weak — so hand the
+   borders back. Same :root specificity lift, same reason. The form-control selectors are
+   generic on purpose; .surface / [data-elevated] are the surface hooks (see above), and
+   components.css names the kit's own .panel / .card / .card-select / .metric-band /
+   .readout for the same rule. */
+@media (prefers-contrast:more){
+  :root .surface,:root [data-elevated],
+  :root input,:root select,:root textarea{border:1px solid var(--separator)}
+}
+
+/* ============ PRINT (Cmd+P -> Save as PDF) ============ */
+@media print{
+  /* Force the light tokens. Paper is white whatever the screen was doing, and every token
+     the dark block overrides has to be reset here or it leaks onto the page — including the
+     easy-to-miss ones (celebrated numbers in near-white, chart bands in charcoal, state
+     colors lightened for a dark ground). Reset the whole dark surface, not the obvious half.
+
+     AUDIT. The dark block redefines 35 tokens; 31 of them are reset below. The four left
+     out are --shadow-1/-2/-3/-hover, and they are safe to leave ONLY because every use of
+     them in this kit is a box-shadow and the `*{box-shadow:none!important}` rule a few
+     lines down erases all of those on paper. If you ever feed a shadow token into
+     something print keeps — a filter:drop-shadow(), a text-shadow — that proof dies and
+     the token has to be reset here too.
+
+     color-scheme is not a token, which is exactly why it got missed: the dark block sets
+     it, this block used to not clear it, and everything the UA draws ITSELF then printed
+     dark — an unchecked checkbox or radio (the kit only sets their accent-color, the box
+     itself is the UA's), and a <select>'s dropdown indicator. print-color-adjust:exact
+     below then guarantees those dark boxes reach the paper. */
+  :root[data-theme="dark"]{
+    color-scheme:light;
+    --bg-base:#fff; --bg-elevated:#fff; --bg-inset:#fff;
+    --label:#2B2925; --label-2:#5F5B54; --label-3:#6F6A62; --ink-number:#2A2823;
+    --separator:rgba(0,0,0,.18); --separator-strong:rgba(0,0,0,.26);
+    --tint:#4F5C67; --tint-strong:#3E4952; --on-tint:#fff;
+    --good:#5A6D4E; --warn:#7D6636; --bad:#8E5348;
+    /* Accents go to their DARKER print variants: they must stay distinguishable after a
+       black-and-white printer flattens them to gray levels. */
+    --accent-1:#2F5E5B; --accent-2:#9E5A33; --accent-3:#3A4E75;
+    --chart-ink:#5F5B54; --chart-grid:#e6e3dd; --chart-axis:#c9c4bb; --chart-muted:#8F8A81;
+    --chart-1:#5A6D4E; --chart-1-band:#CBD3BF; --chart-1-band2:#E1E6D8;
+    --chart-2:#6F6273; --chart-2-band:#D5CCD8; --chart-2-band2:#E8E2EA;
+    --chart-3:#7D6636; --chart-3-band:#E1D4BB; --chart-3-band2:#EFE7D5;
+  }
+  @page{margin:13mm}
+  html,body{background:#fff!important;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
+  /* Paper has no material: no blur, no cast shadow. Which removes the only thing separating
+     our borderless cards — so give them an ink edge instead. Surface hooks again (see the
+     SURFACE HOOKS note above): this edge is for your own surfaces, while components.css
+     gives .panel / .card / .card-select theirs by name. */
+  *{box-shadow:none!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
+  .surface,[data-elevated]{border:1px solid #b9b3a8!important}
+  /* Large screen radii look like a mistake at print resolution; 4px stays a corner. */
+  .surface,[data-elevated],.material,[data-material],input,select,textarea,table,img{border-radius:4px!important}
+  a{color:inherit!important;text-decoration:none!important}
+}

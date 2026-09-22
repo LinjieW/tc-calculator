@@ -1,0 +1,22 @@
+# ---- things that must never reach a PUBLIC repo -------------------------------
+# The source workbook holds the real compensation figures this model was built
+# from. It is the single most disclosive file here.
+OT_Compensation_Total_Package_Exhibit.xlsx
+*.xlsx
+
+# Screenshots show whatever numbers were on screen when they were taken.
+截图-*.png
+*-screenshot.png
+
+# ---- build output ------------------------------------------------------------
+# NOTE: ./index.html is deliberately NOT ignored — it is the generated bundle and
+# GitHub Pages serves it, so it has to be committed. .github/workflows checks it
+# against web/ on every push.
+build/
+*.app/
+薪酬测算.html
+
+# ---- macOS / tooling noise ---------------------------------------------------
+.DS_Store
+__pycache__/
+*.pyc

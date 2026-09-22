@@ -1,0 +1,330 @@
+/* ============================================================
+   app.css — LAYOUT FOR THIS APP ONLY.
+
+   Rules here are page composition: columns, grids, the chart slot, the two
+   app-local classes (.s-lab/.s-val for the third metric tier, .code-inline).
+   Nothing here re-defines a component and nothing here introduces a token
+   NAME — every value below reads tokens.css by name, so a reskin is still
+   that one file re-valued.
+
+   Load order: tokens.css -> components.css -> this file.
+   ============================================================ */
+
+/* The reading spine. 1000px and a 24px gutter are NOT free numbers: they are
+   .topbar-inner / .subbar-inner's own max-width and padding, so the page's
+   first word sits on exactly the same vertical line as the wordmark above it.
+   28px here (the kit demo's value) would read as a 4px shimmer down the page. */
+.col{max-width:1000px;margin:0 auto;padding:30px var(--space-6) 76px;min-width:0}
+
+/* iOS inflates text on rotation unless told not to; the kit does not set this
+   because it was built for desktop. It belongs on html, which tokens.css
+   otherwise owns — hence the note rather than a silent override. */
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+
+/* A notched iPhone in landscape puts the notch over the left or right gutter.
+   max() keeps the desktop gutter everywhere it is already big enough. */
+@supports (padding:max(0px)){
+  .col{padding-left:max(var(--space-6),env(safe-area-inset-left));
+       padding-right:max(var(--space-6),env(safe-area-inset-right))}
+}
+
+.topbar-tools{display:flex;align-items:center;gap:var(--space-3);margin-left:auto}
+
+.lede{max-width:68ch;margin:14px 0 26px}
+
+/* ---- hero row ----
+   One hero per screen: the celebrated figure takes the wide column across the
+   whole row and the control that moves it sits beside it. Two equal boxes
+   would make the reader choose which one is the answer. */
+.hero-grid{display:grid;grid-template-columns:1.1fr 1fr;gap:var(--space-3);
+  align-items:stretch;margin-bottom:var(--space-3);min-width:0}
+.hero-grid > .stat{display:flex;flex-direction:column;justify-content:center;padding:26px 24px}
+.hero-grid > .stat .big{margin-top:2px}
+.hero-grid > .panel{margin-bottom:0;padding:20px 22px;min-width:0}
+
+.dial .panel-head{margin-bottom:2px}
+.dial .slider-row{margin-top:var(--space-4)}
+/* The label column is narrower than the kit's 118px default because this panel
+   is half-width; without it the track has no room left to be a track. */
+.dial .slider-row .sl-lab{min-width:0}
+.dial .slider-row .sl-val{min-width:64px}
+/* An input's intrinsic width comes from its size attribute, not from CSS width.
+   Inside a flex row it refuses to shrink and pushes the document wider than the
+   viewport (gotcha 18). */
+.dial .slider-row input[type=range]{flex:1;min-width:0;width:0}
+.dial .tick{margin-left:0;margin-right:0}
+
+.dial-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-3);margin-top:var(--space-3)}
+.dial-fields .field{margin:0}
+.dial-note{margin:12px 0 0}
+
+/* ---- third metric tier ----
+   .metric-strip > * is the kit's cell; the VALUE inside it is mine to size, and
+   it must land a full class below the band's 24px or the two tiers read as one.
+   (design.md §7: "由你的 markup 给，再小一档".) */
+.metric-strip > * {justify-content:space-between}
+.s-lab{font-family:var(--font-text);font-size:11px;font-weight:600;letter-spacing:.07em;
+  text-transform:uppercase;color:var(--label-3);min-width:0}
+
+/* The uppercase micro-label treatment is right for these labels, but "401(k)" is a
+   proper name whose lowercase k is part of it — text-transform renders it 401(K),
+   which is simply wrong in a compensation document. These labels are otherwise
+   Chinese, which has no case, so turning the transform off changes nothing else. */
+.s-lab.nocase,.metric .lab.nocase,.table th.nocase,.readout .lab.nocase,.stat .lab.nocase{
+  text-transform:none}
+.s-val{font-family:var(--font-num);font-size:15px;font-weight:700;letter-spacing:-.01em;
+  color:var(--ink-number);white-space:nowrap}
+
+/* ---- composition donut ----
+   WKWebView collapses an SVG flex item whose only size is max-width to 0x0: the
+   slices and the centre label stay in the DOM, every assertion passes, and the
+   user sees a blank card (gotcha 1). Give it a real USED size — width resolves
+   against the flex line and aspect-ratio supplies the height. The 240x240 viewBox
+   means 1/1, and max-width caps it so the donut does not balloon on a wide
+   window. */
+.chart-slot{display:flex;justify-content:center;min-width:0}
+.chart-slot > svg{display:block;width:100%;height:auto;aspect-ratio:1/1;max-width:260px}
+
+/* Donut left, the numbers that explain it right. The legend is real text, always
+   visible — a hover-only tooltip would put the breakdown out of reach of the
+   keyboard, and out of reach of anyone reading the printed page. */
+.mix{display:grid;grid-template-columns:minmax(0,260px) minmax(0,1fr);
+  gap:var(--space-6);align-items:center;margin-top:var(--space-3)}
+.mix-legend{list-style:none;margin:0;padding:0;min-width:0}
+.mix-legend > li + li .mix-row{border-top:1px solid var(--separator)}
+
+/* The row is a button: same target for mouse, keyboard and AT. It keeps the
+   typography of a table row rather than looking like a control, because it is a
+   readout you can also point at. */
+.mix-row{display:grid;width:100%;grid-template-columns:auto minmax(0,1fr) auto auto;
+  align-items:baseline;gap:var(--space-3);padding:9px 10px;margin:0;
+  font:inherit;text-align:left;background:none;border:none;border-radius:var(--radius-s);
+  cursor:pointer;transition:background .15s ease}
+.mix-row:hover,.mix-row.is-active{background:var(--bg-inset)}
+.mix-row:focus-visible{outline:2px solid var(--tint);outline-offset:-2px}
+.mix-row.is-active .mix-name{color:var(--label)}
+.mix-row[aria-pressed="true"]{box-shadow:inset 2px 0 0 var(--tint)}
+
+/* CSS owns the transition and the fade; the lift DISTANCE is per-slice and comes
+   from JS, so the two never write the same property at the same moment. Under
+   prefers-reduced-motion the kit drops transform from the transition list, so the
+   lift snaps instead of travelling — which is the correct reading of that
+   preference, not a reason to disable the feedback. */
+.mix-slice{cursor:pointer;transition:transform .18s cubic-bezier(.32,.72,0,1),opacity .18s ease}
+.mix-slice.is-dim{opacity:.45}
+/* Same reason as the slice outlines: the pale band tints need an edge to read as
+   a swatch at 10px on an elevated card. */
+.mix-sw{width:10px;height:10px;border-radius:3px;flex:0 0 auto;align-self:center;
+  box-shadow:inset 0 0 0 1px var(--separator-strong)}
+.mix-name{font-size:12.5px;color:var(--label-2);min-width:0}
+.mix-val{font-family:var(--font-num);font-size:14px;font-weight:700;
+  color:var(--ink-number);white-space:nowrap}
+.mix-pct{font-family:var(--font-num);font-size:11.5px;color:var(--label-3);
+  white-space:nowrap;min-width:46px;text-align:right}
+
+/* "与原表不同" is a state, so it gets the one colour a state may have. */
+.off-book{color:var(--warn)!important}
+/* Before the first render this <svg> has no children: an empty box with height
+   reads as a broken card. The moment anything is appended it reveals itself —
+   no flag to keep in sync. */
+svg.chart:empty{display:none}
+
+/* ---- reverse lookup ---- */
+.rev-row{display:grid;grid-template-columns:minmax(0,220px) minmax(0,1fr);gap:var(--space-4);
+  align-items:end;margin-bottom:var(--space-2)}
+.rev-row .field{margin:0}
+.rev-out{align-self:stretch;display:flex;flex-direction:column;justify-content:center}
+
+/* ---- assumptions ---- */
+.assume-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--space-3) var(--space-4)}
+.assume-grid .field{margin:0}
+.assume-grid .segmented{max-width:100%}
+.assume-grid .segmented button{white-space:nowrap}
+
+.head-tools{display:flex;align-items:center;gap:var(--space-2)}
+
+/* .h-scroll sets gap:2px; the quick-jump bar wants the kit's own bar spacing,
+   and its buttons must not shrink or wrap. */
+.subbar-inner.h-scroll{gap:var(--space-2)}
+.subbar-inner.h-scroll > .btn-ghost{flex:0 0 auto;white-space:nowrap}
+
+/* ---- tables ----
+   The row that the whole page is currently reporting on. One tint wash, no
+   second signal: colour is for state, and this row is already the only one
+   carrying it. */
+.table tbody tr[data-h]{cursor:pointer}
+/* The hour cell is a REAL button, so the row jump has a keyboard path. Making the
+   <tr> itself focusable would have meant lying about its role to AT; a button in
+   the cell keeps the table a table. It inherits the first column's typography so
+   the column still reads as a column, not as a row of controls. */
+.table td .hjump{font:inherit;color:inherit;background:none;border:none;padding:0;
+  cursor:pointer;border-radius:var(--radius-xs);text-decoration:underline;
+  text-decoration-color:var(--separator-strong);text-underline-offset:3px}
+.table td .hjump:hover{color:var(--tint)}
+.table td .hjump:focus-visible{outline:2px solid var(--tint);outline-offset:2px}
+.table tbody tr.is-current .hjump{color:var(--ink-number);font-weight:700}
+.table tbody tr.is-current{background:color-mix(in srgb, var(--tint) 13%, transparent)}
+.table tbody tr.is-current:hover{background:color-mix(in srgb, var(--tint) 18%, transparent)}
+.table tbody tr.is-current td{color:var(--ink-number)}
+.table tbody tr:focus-visible{outline:2px solid var(--tint);outline-offset:-2px}
+
+/* A literal formula is the one place the monospace token belongs. */
+/* Long enough to overflow a 320px phone, and monospace so it does not wrap at the
+   places prose would. Measured at 320: it ran 14px past the viewport and was
+   clipped rather than scrolled, so the tail of the formula was simply gone. */
+.code-inline{font-family:var(--font-code);font-size:11.5px;background:var(--bg-inset);
+  padding:2px 6px;border-radius:var(--radius-xs);color:var(--label);
+  display:inline-block;max-width:100%;overflow-wrap:break-word;word-break:break-word}
+
+/* An empty warning box is not a warning. */
+.callout[hidden]{display:none}
+#warnBox{margin:var(--space-3) 0 var(--space-4)}
+
+/* ---- take-home ---- */
+.tax-year{font-family:var(--font-num);font-size:11px;font-weight:600;letter-spacing:.04em;
+  color:var(--label-3);background:var(--bg-inset);padding:3px 9px;border-radius:var(--radius-xs)}
+.tax-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:var(--space-6);margin:var(--space-4) 0 var(--space-3)}
+.tax-col{min-width:0}
+.tax-sub{font-family:var(--font-text);font-size:11px;font-weight:600;letter-spacing:.07em;
+  text-transform:uppercase;color:var(--label-3);margin:var(--space-3) 0 var(--space-2)}
+.tax-sub-note{text-transform:none;letter-spacing:0;font-weight:400;
+  font-size:11px;color:var(--label-3);margin-left:var(--space-2)}
+.tax-hint{margin:var(--space-2) 0 0;font-size:11.5px}
+.tax-reset{justify-content:flex-end;margin-top:var(--space-4)}
+.tax-params{margin-top:var(--space-4)}
+
+/* The bottom line of a waterfall is a result, not another row. */
+.table tbody tr.wf-total td{font-weight:700;color:var(--ink-number);
+  border-top:1px solid var(--separator-strong);border-bottom:none}
+
+/* The bracket editor is a dense grid of small numbers; it gets its own tighter
+   metrics rather than the reading table's. */
+.bracket-table{margin-top:var(--space-2);font-size:12px}
+.bracket-table th,.bracket-table td{padding:4px 6px}
+.bracket-table td:first-child,.bracket-table th:first-child{text-align:left}
+.bracket-table input{width:100%;min-width:0;font-family:var(--font-num);font-size:12.5px;
+  color:var(--label);border:1px solid var(--separator);border-radius:var(--radius-xs);
+  background:var(--bg-inset);padding:5px 7px;min-height:0}
+:root[data-theme="dark"] .bracket-table input{background:var(--bg-base)}
+.bracket-table td:last-child{width:1%;white-space:nowrap}
+.bracket-table .br-del{padding:4px 8px;font-size:11px}
+
+/* Visually hidden but still in the accessibility tree — the column has no visible
+   header, and an unlabelled column is unlabelled for a screen reader too. */
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);
+  white-space:nowrap}
+
+/* ---- narrow ----
+   820px is the kit's own stack breakpoint for .table.stack and .metric-band;
+   matching it keeps every block changing shape on the same line instead of
+   three different ones. */
+@media (max-width:820px){
+  .mix{grid-template-columns:minmax(0,1fr);gap:var(--space-4);justify-items:center}
+  .mix-legend{width:100%}
+  .hero-grid{grid-template-columns:minmax(0,1fr)}
+  .assume-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .rev-row{grid-template-columns:minmax(0,1fr)}
+  .tax-grid{grid-template-columns:minmax(0,1fr);gap:var(--space-4)}
+  .col{padding:22px var(--space-4) 64px}
+}
+@media (max-width:560px){
+  .assume-grid{grid-template-columns:minmax(0,1fr)}
+  .assume-grid .segmented{display:flex}
+  .assume-grid .segmented button{flex:1;min-width:0;white-space:normal}
+  .dial-fields{grid-template-columns:minmax(0,1fr)}
+  .topbar-tools{gap:var(--space-2)}
+}
+
+/* ---- the no-JavaScript banner ----
+   Only ever rendered inside a <noscript>, so it cannot affect the live page. */
+.banner.nojs{margin:var(--space-4) auto;max-width:1000px;line-height:1.7}
+
+/* ---- touch devices ----
+   Scoped to coarse pointers, so a narrow DESKTOP window keeps the kit's own
+   metrics and only real touch screens get these. */
+@media (pointer:coarse){
+  /* iOS Safari zooms the whole page when you focus an input whose font-size is
+     under 16px — and leaves you zoomed in. On a page that is mostly numeric
+     fields that reads as the app being broken. 16px is the documented
+     threshold, not a taste call. */
+  /* The selector list MATCHES components.css's own, attribute selectors included.
+     `.field input` alone loses to `.field input[type=number]` — @media adds no
+     specificity, so the base rule wins on specificity and the fields keep their
+     14px. Measured: .bracket-table input took the 16px, .field input did not
+     (gotcha 3, in this app's own CSS this time). */
+  .field input[type=text],.field input[type=number],.field input[type=date],
+  .field select,.field textarea,
+  .bracket-table input{font-size:16px}
+
+  /* The range input's own box is 4px tall — the visible thumb overflows it, so it
+     LOOKS grabbable and is almost impossible to hit with a thumb. Pad the hit
+     area without touching the track, which the kit draws. */
+  .dial .slider-row input[type=range]{padding:18px 0;background-clip:content-box}
+
+  /* A 15px checkbox is a 15px target. */
+  .field.check input{width:22px;height:22px}
+  .field.check{min-height:44px}
+
+  /* The info dot is a hint, not a control — but on touch it is the only way to
+     read the definition, so it has to be tappable. */
+  .pop-anchor{width:22px;height:22px;font-size:12px}
+
+  /* Apple's minimum touch target is 44pt. Measured before this: the bracket
+     delete button was ~24px tall, a legend row ~38px, an hour-jump link ~17px. */
+  .bracket-table .br-del{padding:12px 14px;font-size:13px}
+  .bracket-table th,.bracket-table td{padding:6px}
+  .mix-row{padding:13px 10px}
+  .segmented button{padding-top:10px;padding-bottom:10px}
+  .table td .hjump{display:inline-block;padding:7px 2px}
+  .subbar-inner .btn-ghost{padding-top:9px;padding-bottom:9px}
+}
+
+/* ---- print ----
+   The exhibit this app was built from is a printed page, so print has to produce
+   one. tokens.css already neutralises the dark theme and drops shadows and
+   materials; what is left is the app layout that only makes sense on a screen.
+
+   These rules sit AFTER components.css in the cascade, which is what lets them
+   beat the kit's own @media rules at equal specificity — @media adds no
+   specificity, so source order decides (gotcha 3). */
+@media print{
+  /* .pop-anchor is an affordance ("hover me"), and paper has no hover. */
+  .topbar,.subbar,.head-tools,.dial,.pop-anchor,
+  .tax-params,.tax-grid .segmented,.bracket-table{display:none!important}
+  .col{max-width:none;padding:0}
+  .hero-grid{grid-template-columns:minmax(0,1fr);gap:8px}
+  .assume-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .lede{margin:8px 0 14px}
+  .disclosure{background:transparent}
+  .disclosure > summary{display:none}
+  .disclosure-body{display:block!important;height:auto!important}
+  .table tbody tr.is-current{background:transparent!important}
+  .table tbody tr.is-current td{font-weight:700}
+  /* A printed hour is not a link. */
+  .table td .hjump{text-decoration:none;color:inherit}
+
+  /* UN-STACK. A4 minus margins lays out at roughly 700 CSS px, which is inside
+     the kit's 820px card-collapse breakpoint — so without this the 26-row
+     schedule prints as 26 stacked cards and the exhibit runs to a dozen pages of
+     something that is not a table. Every property the stack block sets has to be
+     put back, including the ::before labels it grows from data-label. */
+  .table.stack{display:table;width:100%;border-collapse:collapse;font-size:10.5px}
+  .table.stack tbody{display:table-row-group;width:auto}
+  .table.stack thead{display:table-header-group;position:static;width:auto;height:auto;
+    overflow:visible;clip-path:none}
+  .table.stack tr{display:table-row;grid-template-columns:none;gap:0;
+    margin:0;padding:0;border:0;border-radius:0;background:none}
+  .table.stack td{display:table-cell;padding:5px 7px;border:0;
+    border-bottom:1px solid var(--separator);text-align:right;gap:0}
+  .table.stack td:first-child{text-align:left}
+  .table.stack td:last-child{grid-column:auto}
+  .table.stack td::before{content:none;display:none}
+  .table-scroll{overflow:visible}
+
+  /* Let a long schedule break across pages instead of being pushed whole onto
+     the next one; keep the header with it. */
+  .table thead{display:table-header-group}
+  .table tr{break-inside:avoid;page-break-inside:avoid}
+  #secTable{break-inside:auto;page-break-inside:auto}
+}
