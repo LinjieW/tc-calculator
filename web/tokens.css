@@ -63,8 +63,14 @@
 
   /* ---- ink: warm grays, never neutral #333/#666/#999 on a warm ground ---- */
   --label:#37342F;
-  --label-2:#767168;
-  --label-3:#ABA69C;
+  /* LOCAL RE-VALUATION (values only — see README). As shipped, --label-2 was
+     3.9:1 on the page ground and --label-3 2.1-2.3:1 on cards and wells, and this
+     app sets most of its small print (11-12.5px labels, notes, ticks) in them.
+     Both now clear WCAG AA 4.5:1 on every surface they sit on here: --label-2
+     5.7:1+ on the ground, --label-3 4.6:1+ on a well and 5.1:1 on a card. The
+     tertiary tier is still lighter than the secondary, by less. */
+  --label-2:#5C5850;
+  --label-3:#6F6B63;
   --ink-number:#2A2823;    /* near-ink, reserved for the celebrated number in a hero/metric */
 
   /* ---- lines ---- */
@@ -73,9 +79,12 @@
                                              thing: control tracks, tick marks, inactive dots */
 
   /* ---- state: muted, but never so muted that warn blurs into bad ---- */
-  --good:#6F8A5F;   /* sage — slightly deeper than its dark counterpart, for legibility on white */
-  --warn:#BD985C;   /* ochre */
-  --bad:#AF746A;    /* terracotta */
+  /* LOCAL RE-VALUATION, same hues one step deeper: white toast text on the
+     shipped sage/terracotta was 3.8:1, and ochre as TEXT (the 与原表口径不同 state,
+     warnings) was 2.6:1 on a card. Now 4.6:1+ and 5.4:1. */
+  --good:#647C56;   /* sage — slightly deeper than its dark counterpart, for legibility on white */
+  --warn:#806334;   /* ochre */
+  --bad:#9C675E;    /* terracotta */
 
   /* ---- accents: CATEGORICAL, for data dimensions / scenes. Not state. ----
      Kept off the red/orange axis on purpose so an accent can never be misread as
@@ -91,7 +100,7 @@
      muted coral and slate blue. Re-apply this block if the kit is ever updated. */
   --accent-1:#5C8A87;   /* dusty aqua */
   --accent-2:#C2765A;   /* muted coral — deliberately redder than --warn's ochre
-                           (#BD985C) so a data slice cannot be read as a warning */
+                           (light --warn) so a data slice cannot be read as a warning */
   --accent-3:#6C82A4;   /* slate blue */
 
   /* ---- radius ----
@@ -182,8 +191,9 @@
   --bg-base:#1D1B19; --bg-inset:#242220; --bg-elevated:#2B2925;
 
   --label:#EDE9E1; --label-2:#ACA79D;
-  --label-3:#8A857B;                       /* lifted off a literal remap: 11px metadata in the
-                                              tertiary color must stay readable on charcoal */
+  --label-3:#969187;                       /* lifted off a literal remap: 11px metadata in the
+                                              tertiary color must stay readable on charcoal.
+                                              LOCAL: was #8A857B, 3.96:1 on a card; now 4.6:1 */
   --ink-number:#F5F1E9;
 
   --separator:rgba(240,236,228,.15);

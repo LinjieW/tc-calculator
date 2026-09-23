@@ -11,6 +11,7 @@ Usage: makeicon.py <output.icns|output_dir>
 
 import os
 import struct
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -147,21 +148,26 @@ def main():
 
     cache = {}
     tmp = tempfile.mkdtemp()
-    iconset = os.path.join(tmp, "AppIcon.iconset")
-    os.makedirs(iconset)
-
-    for name, size in SPEC:
-        if size not in cache:
-            cache[size] = render(size)
-        write_png(os.path.join(iconset, name), size, cache[size])
-
+    # Removed on every exit path: each build used to leave one of these behind,
+    # and $TMPDIR had collected dozens of them.
     try:
-        subprocess.check_call(["iconutil", "-c", "icns", iconset, "-o", out])
-    except (OSError, subprocess.CalledProcessError) as e:
-        print("iconutil failed: %s" % e, file=sys.stderr)
-        return 1
-    print("wrote %s" % out)
-    return 0
+        iconset = os.path.join(tmp, "AppIcon.iconset")
+        os.makedirs(iconset)
+
+        for name, size in SPEC:
+            if size not in cache:
+                cache[size] = render(size)
+            write_png(os.path.join(iconset, name), size, cache[size])
+
+        try:
+            subprocess.check_call(["iconutil", "-c", "icns", iconset, "-o", out])
+        except (OSError, subprocess.CalledProcessError) as e:
+            print("iconutil failed: %s" % e, file=sys.stderr)
+            return 1
+        print("wrote %s" % out)
+        return 0
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
 
 
 if __name__ == "__main__":

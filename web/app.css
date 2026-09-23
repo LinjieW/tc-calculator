@@ -31,6 +31,27 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 .topbar-tools{display:flex;align-items:center;gap:var(--space-3);margin-left:auto}
 
 .lede{max-width:68ch;margin:14px 0 26px}
+/* --tint-strong, not --tint: --tint is 4.46:1 on the page ground, a hair under
+   AA for 12.5px text. */
+.lede-jump{color:var(--tint-strong);text-decoration:underline;text-decoration-color:color-mix(in srgb, var(--tint) 45%, transparent);
+  text-underline-offset:3px}
+
+/* ---- top bar live readout ----
+   The compact slot shows the two answers instead of re-printing the page title
+   (renderTopbarLive). The labels are quieter than the figures. */
+.topbar-title .tl-lab,.topbar-title .tl-lab2{color:var(--label-2);font-weight:500}
+.topbar-title .tl-sep{color:var(--label-3)}
+/* When space runs out the TOTAL gives way (ellipsis) and the take-home figure
+   stays whole — a truncated "到手 $69,3…" is worse than no figure. */
+.topbar.title-shown .topbar-title{display:flex;min-width:0}
+.topbar-title .tl-total{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.topbar-title .tl-take{flex:0 0 auto}
+
+/* Headings for structure, the kit's panel/sub-label typography for looks. The
+   kit's reset already zeroes their margins; tabindex=-1 is set only so the
+   quick-jump bar can move focus there, which is not a place to draw a ring. */
+h2.panel-title,h3.tax-sub{font-family:var(--font-text)}
+h2.panel-title[tabindex="-1"]:focus,section[tabindex="-1"]:focus{outline:none}
 
 /* ---- hero row ----
    One hero per screen: the celebrated figure takes the wide column across the
@@ -40,6 +61,8 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
   align-items:stretch;margin-bottom:var(--space-3);min-width:0}
 .hero-grid > .stat{display:flex;flex-direction:column;justify-content:center;padding:26px 24px}
 .hero-grid > .stat .big{margin-top:2px}
+.hero-grid > .stat .hero-take{margin-top:6px;color:var(--label);font-weight:600}
+.hero-grid > .stat .hero-take:empty{display:none}
 .hero-grid > .panel{margin-bottom:0;padding:20px 22px;min-width:0}
 
 .dial .panel-head{margin-bottom:2px}
@@ -61,8 +84,10 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 /* ---- third metric tier ----
    .metric-strip > * is the kit's cell; the VALUE inside it is mine to size, and
    it must land a full class below the band's 24px or the two tiers read as one.
-   (design.md §7: "由你的 markup 给，再小一档".) */
-.metric-strip > * {justify-content:space-between}
+   (design.md §7: "由你的 markup 给，再小一档".) The cell keeps the kit's own
+   label-then-value spacing: pushing the value to the far edge of its cell put it
+   closer to the NEXT cell's label than to its own, which pairs figures with the
+   wrong words. */
 .s-lab{font-family:var(--font-text);font-size:11px;font-weight:600;letter-spacing:.07em;
   text-transform:uppercase;color:var(--label-3);min-width:0}
 
@@ -122,8 +147,51 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 .mix-pct{font-family:var(--font-num);font-size:11.5px;color:var(--label-3);
   white-space:nowrap;min-width:46px;text-align:right}
 
-/* "与原表不同" is a state, so it gets the one colour a state may have. */
+/* "与原表口径不同" is a state, so it gets the one colour a state may have. */
 .off-book{color:var(--warn)!important}
+.tax-warn{color:var(--warn)}
+
+/* A label for a control that is not a form field (a segmented group, labelled
+   through aria-labelledby). A <label> there labels nothing; this is the kit's
+   .field > label look without the element. */
+.field > .field-label{display:flex;justify-content:space-between;align-items:baseline;gap:var(--space-2);
+  font-size:12px;color:var(--label-2);margin-bottom:4px}
+
+/* The selected segment already has the thumb; weight is the second, non-colour
+   cue the kit's comment promises. */
+.segmented button:not([aria-pressed="true"]){font-weight:500}
+
+/* The kit removes the range input's outline and gives it nothing back, so a
+   keyboard user had no idea the slider had focus. The ring goes on the knob. */
+.dial input[type=range]:focus-visible::-webkit-slider-thumb{
+  box-shadow:0 0 0 2px var(--bg-elevated),0 0 0 4px var(--tint),var(--shadow-1)}
+
+/* A disabled field has to look disabled: #hWeek goes dead when there are no
+   working weeks, and at full strength it read as a broken input. */
+.field input:disabled{opacity:.5;cursor:not-allowed}
+.field input::placeholder,.bracket-table input::placeholder{color:var(--label-3);opacity:1}
+
+/* The closed select. With the native appearance WebKit ignores the kit's
+   min-height and padding and draws a 23px popup button beside 38px fields;
+   select-menu.js already replaces the popup, so nothing is lost by dropping it.
+   The chevron is two gradients so its colour stays a token. */
+.field select{-webkit-appearance:none;appearance:none}
+/* Longhands, repeated under every selector the kit uses to reset the select's
+   `background` SHORTHAND (dark theme, focus) — each of those wiped the image,
+   and with the native arrow gone nothing then said "dropdown". */
+.field select,.field select:focus,
+:root[data-theme="dark"] .field select,:root[data-theme="dark"] .field select:focus{
+  background-image:linear-gradient(45deg,transparent 50%,var(--label-2) 50%),
+                   linear-gradient(135deg,var(--label-2) 50%,transparent 50%);
+  background-position:calc(100% - 16px) 50%,calc(100% - 11px) 50%;
+  background-size:5px 5px,5px 5px;background-repeat:no-repeat}
+
+/* Escape (or Enter/Space on the dot) closes the popover without moving focus.
+   Same specificity as the kit's :hover/:focus reveal, and later, so it wins. */
+.pop-anchor.pop-dismissed .popover{opacity:0;visibility:hidden}
+
+/* 撤销 appears next to its reset button for 10 s (offerUndo). */
+#resetUndo,#taxUndo{color:var(--tint-strong)}
 /* Before the first render this <svg> has no children: an empty box with height
    reads as a broken card. The moment anything is appended it reveals itself —
    no flag to keep in sync. */
@@ -147,6 +215,17 @@ svg.chart:empty{display:none}
    and its buttons must not shrink or wrap. */
 .subbar-inner.h-scroll{gap:var(--space-2)}
 .subbar-inner.h-scroll > .btn-ghost{flex:0 0 auto;white-space:nowrap}
+
+/* ---- the schedule on a phone ----
+   It stays a TABLE and scrolls sideways, with the hour column pinned, instead
+   of becoming 26 stacked cards: stacked, it was 7,240px of phone and pushed the
+   assumptions 14,000px down the page. The waterfall and the reverse table fit
+   at 360px and wider; at 320 in 精确 mode they scroll a few px inside their own
+   box. The pinned cell needs an opaque fill, including the current row's tint
+   mixed onto it. */
+.table.sched th:first-child,.table.sched td:first-child{position:sticky;left:0;z-index:1;background:var(--bg-elevated)}
+.table.sched tbody tr:hover td:first-child{background:var(--bg-inset)}
+.table.sched tbody tr.is-current td:first-child{background:color-mix(in srgb, var(--tint) 13%, var(--bg-elevated))}
 
 /* ---- tables ----
    The row that the whole page is currently reporting on. One tint wash, no
@@ -234,6 +313,25 @@ svg.chart:empty{display:none}
   .assume-grid .segmented button{flex:1;min-width:0;white-space:normal}
   .dial-fields{grid-template-columns:minmax(0,1fr)}
   .topbar-tools{gap:var(--space-2)}
+  /* One row, always. The live readout takes the brand's place instead of
+     wrapping the bar to two lines — a wrap made the whole page jump ~20px the
+     moment it appeared. */
+  .topbar-inner{flex-wrap:nowrap}
+  .topbar.title-shown .topbar-brand{display:none}
+  .topbar.title-shown .topbar-title{max-width:none;flex:1 1 auto;min-width:0;padding-left:0;font-size:13.5px}
+  .topbar-title .tl-lab{display:none}
+  /* The readout takes the squeeze, never the controls: a squeezed 整数/精确
+     wrapped to two lines and grew the bar by 10px. */
+  .topbar-tools{flex:0 0 auto}
+  .topbar-tools .segmented button{white-space:nowrap}
+}
+/* The smallest phones: the four-up tax band and the tables were a few px too
+   wide at 320 in 精确 mode. */
+@media (max-width:360px){
+  /* Room for one figure only: the take-home, whole, rather than both clipped. */
+  .topbar-title .tl-total{display:none}
+  .metric-band .metric .val{font-size:20px}
+  .table th,.table td{padding-left:6px;padding-right:6px}
 }
 
 /* ---- the no-JavaScript banner ----
@@ -278,6 +376,9 @@ svg.chart:empty{display:none}
   .segmented button{padding-top:10px;padding-bottom:10px}
   .table td .hjump{display:inline-block;padding:7px 2px}
   .subbar-inner .btn-ghost{padding-top:9px;padding-bottom:9px}
+  /* The rest of the 44pt pass: measured at 25px tall before. */
+  .head-tools .btn-ghost,[data-addrow],.subbar-inner .btn-ghost,.segmented button{min-height:44px}
+  #themeToggle{min-width:44px;min-height:44px}
 }
 
 /* ---- print ----
@@ -304,22 +405,11 @@ svg.chart:empty{display:none}
   /* A printed hour is not a link. */
   .table td .hjump{text-decoration:none;color:inherit}
 
-  /* UN-STACK. A4 minus margins lays out at roughly 700 CSS px, which is inside
-     the kit's 820px card-collapse breakpoint — so without this the 26-row
-     schedule prints as 26 stacked cards and the exhibit runs to a dozen pages of
-     something that is not a table. Every property the stack block sets has to be
-     put back, including the ::before labels it grows from data-label. */
-  .table.stack{display:table;width:100%;border-collapse:collapse;font-size:10.5px}
-  .table.stack tbody{display:table-row-group;width:auto}
-  .table.stack thead{display:table-header-group;position:static;width:auto;height:auto;
-    overflow:visible;clip-path:none}
-  .table.stack tr{display:table-row;grid-template-columns:none;gap:0;
-    margin:0;padding:0;border:0;border-radius:0;background:none}
-  .table.stack td{display:table-cell;padding:5px 7px;border:0;
-    border-bottom:1px solid var(--separator);text-align:right;gap:0}
-  .table.stack td:first-child{text-align:left}
-  .table.stack td:last-child{grid-column:auto}
-  .table.stack td::before{content:none;display:none}
+  /* Paper tables: denser type, and no pinned column (sticky means nothing on
+     a page). */
+  .table{font-size:10.5px}
+  .table td{padding:5px 7px}
+  .table.sched th:first-child,.table.sched td:first-child{position:static;background:none}
   .table-scroll{overflow:visible}
 
   /* Let a long schedule break across pages instead of being pushed whole onto

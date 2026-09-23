@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>加班与总薪酬测算</title>
+<meta name="description" content="加班费、年终奖与雇主福利折算成总薪酬包，再估算税后到手（单身、DC、2026 税表）。预填的是示例数字，改成你自己的即可，数据只存在本机。">
 
 <!-- Theme BEFORE the stylesheets, inline and blocking. A deferred theme decision paints
      one full frame of the wrong theme on every launch. -->
@@ -34,7 +35,12 @@ document.documentElement.dataset.theme=t||((window.matchMedia&&matchMedia("(pref
 <div class="topbar">
   <div class="topbar-inner">
     <div class="topbar-brand">薪酬测算</div>
-    <div class="topbar-title" id="topbarTitle" aria-hidden="true"></div>
+    <!-- The kit echoes the page title into the hidden span, which is what drives
+         .title-shown; the visible compact slot carries live figures instead
+         (renderTopbarLive), so an answer stays on screen while you edit the
+         assumptions a long way down the page. -->
+    <span id="topbarEcho" hidden></span>
+    <div class="topbar-title tnum" id="topbarTitle" aria-hidden="true"></div>
     <div class="topbar-tools">
       <div class="segmented" id="precToggle" role="group" aria-label="数值精度">
         <button type="button" data-prec="0" aria-pressed="true">整数</button>
@@ -66,8 +72,8 @@ document.documentElement.dataset.theme=t||((window.matchMedia&&matchMedia("(pref
 
   <h1 class="page-title">加班与总薪酬测算</h1>
   <p class="panel-note lede">
-    把加班费和固定年终奖一起，折算成「相当于多少比例的年终奖」<span class="pop-anchor" tabindex="0">i<span class="popover">（加班费 + 固定年终奖）÷ 基本工资。它把两笔钱当成一笔按基本工资计算的传统年终奖来看，方便和「涨 X% 年终奖」这类说法直接比较。</span></span>，并算出含雇主福利的总薪酬包。
-    所有假设都可以在下方修改，改完即时生效，并保存在本机。
+    把加班费和固定年终奖一起，折算成「相当于多少比例的年终奖」<span class="pop-anchor" tabindex="0" role="button" aria-label="等效年终奖的定义" aria-describedby="popEq">i<span class="popover" id="popEq" role="tooltip">（加班费 + 固定年终奖）÷ 基本工资。它把两笔钱当成一笔按基本工资计算的传统年终奖来看，方便和「涨 X% 年终奖」这类说法直接比较。</span></span>，算出含雇主福利的总薪酬包，再估算税后到手（单身、住 DC、2026 税表）。
+    预填的是<strong>示例数字</strong>——<a href="#secAssume" class="lede-jump">在「假设」里换成你自己的</a>，改完即时生效，只保存在本机。
   </p>
 
   <!-- ============ 一档 hero + 控制盘 ============ -->
@@ -76,10 +82,13 @@ document.documentElement.dataset.theme=t||((window.matchMedia&&matchMedia("(pref
       <div class="lab">总薪酬包 · TOTAL PACKAGE</div>
       <div class="big tnum" id="heroVal">—</div>
       <div class="sub" id="heroSub">—</div>
+      <!-- Its own line, not a clause of the one above: that sentence is an
+           identity (cash + benefits = the total) and its figures must add up. -->
+      <div class="sub hero-take" id="heroTake"></div>
     </div>
 
     <div class="panel dial">
-      <div class="panel-head"><div class="panel-title">加班小时</div></div>
+      <div class="panel-head"><h2 class="panel-title">加班小时</h2></div>
 
       <div class="slider-row">
         <span class="sl-lab">年加班小时</span>
@@ -96,7 +105,7 @@ document.documentElement.dataset.theme=t||((window.matchMedia&&matchMedia("(pref
         </div>
         <div class="field">
           <label for="hWeek"><span>折合每工作周</span><span class="val" id="hWeekUnit">h / 周</span></label>
-          <input id="hWeek" type="number" min="0" step="0.01" value="4.81" inputmode="decimal">
+          <input id="hWeek" type="number" min="0" step="0.01" value="4.81" inputmode="decimal" placeholder="—">
         </div>
       </div>
       <p class="panel-note dial-note" id="dialNote">—</p>
@@ -105,7 +114,7 @@ document.documentElement.dataset.theme=t||((window.matchMedia&&matchMedia("(pref
 
   <!-- ============ 二档 指标带 ============ -->
   <div class="metric-band" id="band">
-    <div class="metric"><div class="lab">加班费</div><div class="val tnum" id="mOtPay">—</div><div class="note">OT pay</div></div>
+    <div class="metric"><div class="lab">加班费</div><div class="val tnum" id="mOtPay">—</div><div class="note">加班小时 × 加班时薪</div></div>
     <div class="metric"><div class="lab">变动薪酬</div><div class="val tnum" id="mVar">—</div><div class="note">加班费 + 年终奖</div></div>
     <div class="metric"><div class="lab">等效年终奖</div><div class="val tnum" id="mEq">—</div><div class="note">占基本工资比例</div></div>
     <div class="metric"><div class="lab">总现金薪酬</div><div class="val tnum" id="mCash">—</div><div class="note">基本工资 + 变动</div></div>
@@ -135,7 +144,7 @@ document.documentElement.dataset.theme=t||((window.matchMedia&&matchMedia("(pref
 
   <!-- ============ 构成 ============ -->
   <section class="panel" id="secMix" aria-label="总薪酬包构成">
-    <div class="panel-head"><div class="panel-title">总薪酬包的构成</div></div>
+    <div class="panel-head"><h2 class="panel-title">总薪酬包的构成</h2></div>
     <div class="mix">
       <!-- A donut, not a pie: the hole is where the total goes, which is the one
            number the whole chart exists to explain. -->
@@ -145,7 +154,7 @@ document.documentElement.dataset.theme=t||((window.matchMedia&&matchMedia("(pref
       </div>
       <ul class="mix-legend tnum" id="mixLegend"></ul>
     </div>
-    <p class="panel-note" id="mixDesc">各块之和严格等于中间的总薪酬包。「PTO」是从基本工资里切出来的——两块加起来才是全额基本工资，不是额外的钱。指向任意一块（或用键盘聚焦右边的行），那一块会弹出来、其余变暗；点一下钉住，Esc 取消。</p>
+    <p class="panel-note" id="mixDesc">各块之和严格等于中间的总薪酬包。「PTO」是从基本工资里切出来的——两块加起来才是全额基本工资，不是额外的钱。指向或点按任意一块（或旁边列表里的行，也可以用键盘聚焦），那一块会弹出来、其余变暗；点一下钉住，再点一次或按 Esc 取消。</p>
   </section>
 
   <!-- ============ 税后 ============ -->
@@ -153,7 +162,7 @@ document.documentElement.dataset.theme=t||((window.matchMedia&&matchMedia("(pref
        pre-tax model stays exactly what the workbook says. -->
   <section class="panel" id="secTax" aria-label="税后到手">
     <div class="panel-head">
-      <div class="panel-title">税后到手</div>
+      <h2 class="panel-title">税后到手</h2>
       <div class="head-tools"><span class="tax-year" id="taxYearTag">2026 税率</span></div>
     </div>
     <p class="panel-note">
@@ -178,7 +187,7 @@ document.documentElement.dataset.theme=t||((window.matchMedia&&matchMedia("(pref
 
     <div class="tax-grid">
       <div class="tax-col">
-        <div class="tax-sub">税前供款</div>
+        <h3 class="tax-sub">税前供款</h3>
         <div class="field">
           <label for="c401k"><span>401(k) 员工供款</span><span class="val" id="c401kCap">上限 24,500</span></label>
           <input id="c401k" type="number" min="0" step="500" inputmode="decimal">
@@ -195,21 +204,33 @@ document.documentElement.dataset.theme=t||((window.matchMedia&&matchMedia("(pref
           <label for="cIra"><span>传统 IRA 供款</span><span class="val" id="cIraCap">上限 7,500</span></label>
           <input id="cIra" type="number" min="0" step="500" inputmode="decimal">
         </div>
+        <div class="field check">
+          <input id="cIraCovered" type="checkbox">
+          <label for="cIraCovered">有公司退休计划（401(k)、利润分享等）</label>
+        </div>
         <p class="panel-note tax-hint" id="iraHint" hidden></p>
+        <p class="panel-note tax-hint tax-warn" id="contribHint" hidden></p>
       </div>
 
       <div class="tax-col">
-        <div class="tax-sub">口径开关</div>
+        <h3 class="tax-sub">口径开关</h3>
         <div class="field">
-          <label><span>FICA（社保 + 医保）</span><span class="val" id="ficaNote">计入</span></label>
-          <div class="segmented" id="ficaToggle" role="group" aria-label="是否计算 FICA">
+          <span class="field-label"><span id="ficaLab">FICA（社保 + 医保）</span><span class="val" id="ficaNote">计入</span></span>
+          <div class="segmented" id="ficaToggle" role="group" aria-labelledby="ficaLab">
             <button type="button" data-on="1" aria-pressed="true">计入</button>
             <button type="button" data-on="0" aria-pressed="false">不计</button>
           </div>
         </div>
         <div class="field">
-          <label><span>OBBBA 加班免税</span><span class="val" id="otDedNote">计入</span></label>
-          <div class="segmented" id="otDedToggle" role="group" aria-label="是否计算 OBBBA 加班扣除">
+          <span class="field-label"><span id="otDedLab">OBBBA 加班扣除（仅 FLSA 非豁免）</span><span class="val" id="otDedNote">计入</span></span>
+          <div class="segmented" id="otDedToggle" role="group" aria-labelledby="otDedLab">
+            <button type="button" data-on="1" aria-pressed="true">计入</button>
+            <button type="button" data-on="0" aria-pressed="false">不计</button>
+          </div>
+        </div>
+        <div class="field">
+          <span class="field-label"><span id="dcOtDedLab">DC 也扣加班扣除</span><span class="val" id="dcOtDedNote">计入</span></span>
+          <div class="segmented" id="dcOtDedToggle" role="group" aria-labelledby="dcOtDedLab">
             <button type="button" data-on="1" aria-pressed="true">计入</button>
             <button type="button" data-on="0" aria-pressed="false">不计</button>
           </div>
@@ -219,7 +240,7 @@ document.documentElement.dataset.theme=t||((window.matchMedia&&matchMedia("(pref
     </div>
 
     <div class="table-scroll">
-      <table class="table stack" id="waterfall">
+      <table class="table" id="waterfall">
         <thead><tr><th>项目</th><th>金额</th><th>占总现金薪酬</th></tr></thead>
         <tbody></tbody>
       </table>
@@ -230,13 +251,14 @@ document.documentElement.dataset.theme=t||((window.matchMedia&&matchMedia("(pref
       <div class="disclosure-body">
         <p class="panel-note">
           预填的是 2026 年的数字（联邦档位与标准扣除来自 IRS Rev. Proc. 2025-32；
-          DC 档位自 2022 年起未变；社保工资上限来自 SSA；供款上限来自 IRS）。
-          每年新数字出来之后，直接在这里改。
+          DC 档位自 2022 年起未变，标准扣除取自 OTR 2026 年 D-40ES；社保工资上限来自 SSA；
+          供款上限与 IRA 退坡区间来自 IRS）。每年新数字出来之后，直接在这里改；
+          页面更新了默认税表时，会自动换成新的一年，你的供款和开关保留。
         </p>
 
         <div class="tax-grid">
           <div class="tax-col">
-            <div class="tax-sub">联邦 <span class="tax-sub-note">taxable = AGI − 标准扣除 − 加班扣除</span></div>
+            <h3 class="tax-sub">联邦 <span class="tax-sub-note">taxable = AGI − 标准扣除 − 加班扣除</span></h3>
             <div class="field">
               <label for="fedStd"><span>联邦标准扣除</span><span class="val">$</span></label>
               <input id="fedStd" type="number" min="0" step="100" inputmode="decimal">
@@ -245,11 +267,12 @@ document.documentElement.dataset.theme=t||((window.matchMedia&&matchMedia("(pref
               <thead><tr><th>该档上限 ($)</th><th>税率 (%)</th><th><span class="sr-only">操作</span></th></tr></thead>
               <tbody></tbody>
             </table>
+            <p class="panel-note tax-hint tax-warn" id="fedBrHint" hidden></p>
             <button class="btn-ghost sm quiet" type="button" data-addrow="fed">加一档</button>
           </div>
 
           <div class="tax-col">
-            <div class="tax-sub">DC <span class="tax-sub-note">taxable = AGI − DC 标准扣除</span></div>
+            <h3 class="tax-sub">DC <span class="tax-sub-note" id="dcSubNote">taxable = AGI − DC 标准扣除</span></h3>
             <div class="field">
               <label for="dcStd"><span>DC 标准扣除</span><span class="val">$</span></label>
               <input id="dcStd" type="number" min="0" step="100" inputmode="decimal">
@@ -258,11 +281,12 @@ document.documentElement.dataset.theme=t||((window.matchMedia&&matchMedia("(pref
               <thead><tr><th>该档上限 ($)</th><th>税率 (%)</th><th><span class="sr-only">操作</span></th></tr></thead>
               <tbody></tbody>
             </table>
+            <p class="panel-note tax-hint tax-warn" id="dcBrHint" hidden></p>
             <button class="btn-ghost sm quiet" type="button" data-addrow="dc">加一档</button>
           </div>
         </div>
 
-        <div class="tax-sub">FICA 与 OBBBA</div>
+        <h3 class="tax-sub">FICA 与 OBBBA</h3>
         <div class="assume-grid">
           <div class="field">
             <label for="ssRate"><span>社保税率</span><span class="val">%</span></label>
@@ -305,13 +329,22 @@ document.documentElement.dataset.theme=t||((window.matchMedia&&matchMedia("(pref
             <input id="iraLimit" type="number" min="0" step="500" inputmode="decimal">
           </div>
           <div class="field">
+            <label for="iraPhaseLo"><span>IRA 抵扣退坡起点</span><span class="val">MAGI $</span></label>
+            <input id="iraPhaseLo" type="number" min="0" step="1000" inputmode="decimal">
+          </div>
+          <div class="field">
+            <label for="iraPhaseHi"><span>IRA 抵扣退坡终点</span><span class="val">MAGI $</span></label>
+            <input id="iraPhaseHi" type="number" min="0" step="1000" inputmode="decimal">
+          </div>
+          <div class="field">
             <label for="taxYear"><span>税表年度</span><span class="val">年</span></label>
             <input id="taxYear" type="number" min="2000" step="1" inputmode="numeric">
           </div>
         </div>
 
         <div class="head-tools tax-reset">
-          <button class="btn-ghost sm quiet" type="button" id="taxResetBtn">恢复 2026 默认税表</button>
+          <button class="btn-ghost sm quiet" type="button" id="taxResetBtn">恢复默认税表</button>
+          <button class="btn-ghost sm" type="button" id="taxUndo" hidden>撤销</button>
         </div>
       </div>
     </details>
@@ -319,11 +352,11 @@ document.documentElement.dataset.theme=t||((window.matchMedia&&matchMedia("(pref
 
   <!-- ============ 反查 ============ -->
   <section class="panel" id="secReverse" aria-label="反查">
-    <div class="panel-head"><div class="panel-title">反查：想拿到等效年终奖，需要加多少班</div></div>
+    <div class="panel-head"><h2 class="panel-title">反查：想拿到等效年终奖，需要加多少班</h2></div>
 
     <div class="rev-row">
       <div class="field">
-        <label for="revPct"><span>目标等效年终奖</span><span class="val">% of base</span></label>
+        <label for="revPct"><span>目标等效年终奖</span><span class="val">占基本工资 %</span></label>
         <input id="revPct" type="number" min="0" step="0.5" value="25" inputmode="decimal">
       </div>
       <div class="readout rev-out">
@@ -334,7 +367,7 @@ document.documentElement.dataset.theme=t||((window.matchMedia&&matchMedia("(pref
     </div>
 
     <div class="table-scroll">
-      <table class="table stack" id="revTable">
+      <table class="table" id="revTable">
         <thead><tr><th>目标 %</th><th class="nocase">需要加班 (h)</th><th class="nocase">折合每周 (h)</th><th>届时总薪酬包</th></tr></thead>
         <tbody></tbody>
       </table>
@@ -345,7 +378,7 @@ document.documentElement.dataset.theme=t||((window.matchMedia&&matchMedia("(pref
   <!-- ============ 明细表 ============ -->
   <section class="panel" id="secTable" aria-label="明细表">
     <div class="panel-head">
-      <div class="panel-title">明细表</div>
+      <h2 class="panel-title">明细表</h2>
       <div class="head-tools">
         <button class="btn-ghost sm" type="button" id="copyBtn">复制表格</button>
         <button class="btn-ghost sm" type="button" id="csvBtn">导出 CSV</button>
@@ -353,7 +386,7 @@ document.documentElement.dataset.theme=t||((window.matchMedia&&matchMedia("(pref
       </div>
     </div>
     <div class="table-scroll">
-      <table class="table stack" id="schedTable">
+      <table class="table sched" id="schedTable">
         <thead><tr>
           <th class="nocase">加班 (h)</th><th>加班费</th><th>变动薪酬</th><th>等效年终奖</th>
           <th>总现金薪酬</th><th class="nocase">401(k) 匹配</th><th>利润分享</th><th>通讯补贴</th><th>总薪酬包</th>
@@ -367,12 +400,13 @@ document.documentElement.dataset.theme=t||((window.matchMedia&&matchMedia("(pref
   <!-- ============ 假设 ============ -->
   <section class="panel" id="secAssume" aria-label="假设">
     <div class="panel-head">
-      <div class="panel-title">假设</div>
+      <h2 class="panel-title">假设</h2>
       <div class="head-tools">
         <button class="btn-ghost sm quiet" type="button" id="resetBtn">恢复默认</button>
+        <button class="btn-ghost sm" type="button" id="resetUndo" hidden>撤销</button>
       </div>
     </div>
-    <p class="panel-note">全部来自原表 Backup 工作表的「可编辑假设」。改动即时生效并保存在本机。</p>
+    <p class="panel-note">预填的是示例数字，换成你自己的即可；改动即时生效，只保存在本机。公式逐格对应原表 Backup 工作表。</p>
 
     <div class="assume-grid">
       <div class="field">
@@ -400,11 +434,11 @@ document.documentElement.dataset.theme=t||((window.matchMedia&&matchMedia("(pref
            setting rather than an assumption baked into the formula. The workbook
            includes OT (F22 = $B$9*($B$5+B22)); that stays the default. -->
       <div class="field">
-        <label><span>匹配的计算基数</span><span class="val" id="matchBaseNote">跟随原表</span></label>
+        <span class="field-label"><span id="matchBaseLab">匹配的计算基数</span><span class="val" id="matchBaseNote">原表口径</span></span>
         <!-- Short labels on purpose: the field label above already says what is
              being chosen, and at three columns a longer pair forces this field to
              span two, which leaves a hole in the grid. -->
-        <div class="segmented" id="matchBaseToggle" role="group" aria-label="401(k) 匹配的计算基数">
+        <div class="segmented" id="matchBaseToggle" role="group" aria-labelledby="matchBaseLab">
           <button type="button" data-mot="1" aria-pressed="true">含加班费</button>
           <button type="button" data-mot="0" aria-pressed="false">仅基本工资</button>
         </div>
@@ -446,18 +480,23 @@ document.documentElement.dataset.theme=t||((window.matchMedia&&matchMedia("(pref
       <p class="panel-note">401(k) 匹配的计算基数可切换。原表按「基本工资 + 加班费」计算；如果你的计划文件把加班费排除在 eligible compensation 之外，切到「仅基本工资」，匹配额就不再随加班增长。切成后者时结果会与原表不一致，页面上会标出来。</p>
       <p class="panel-note">这只是现金薪酬与雇主福利的比较。加班需要额外付出工时，这一点和传统年终奖不同。利润分享按当年经济价值计入，即使次年 3、4 月才发放。</p>
       <p class="panel-note"><strong>关于 PTO</strong>：带薪休假不改变任何一个金额——它本来就含在基本工资里，所以基本工资、加班费、总薪酬包、401(k) 匹配和全部税额，加不加 PTO 都一样。加班时薪仍然按 <span class="code-inline">基本工资 ÷ 标准年工时</span> 算（这是薪资口径：除数是「工资覆盖的小时数」，PTO 不缩小它；除以 1,920 会把加班时薪算高）。PTO 真正改变的是两件事：<strong>实际每工作一小时值多少</strong>（总现金 ÷ 扣掉 PTO、加上加班的实际工时），以及<strong>加班要挤进多少周</strong>——四周 PTO 意味着只有 48 个工作周，同样 250 小时加班就从每周 4.8 变成 5.2 小时。</p>
-      <p class="panel-note">全部数值口径与 <span class="code-inline">OT_Compensation_Total_Package_Exhibit.xlsx</span> 的 Backup 工作表一致。税后板块是额外加的，原表里没有。</p>
-      <p class="panel-note"><strong>税后板块的口径</strong>：单身申报、只用标准扣除。401(k) 减联邦和 DC 的应税收入但<strong>不减 FICA</strong>；HSA 走工资扣除时连 FICA 一起减，不走工资扣除则只减所得税。OBBBA 加班扣除只作用于<strong>联邦所得税</strong>，只针对加班费里「一倍以上」的那部分溢价，按 MAGI 超过起点每 1,000 美元递减 100 美元（不足 1,000 按 1,000 计），DC 不跟随。传统 IRA 在有公司退休计划且收入较高时通常<strong>不可抵扣</strong>，页面会提示，但不会替你判断。</p>
+      <p class="panel-note">税前部分的公式逐格对应原 Excel 模型的 Backup 工作表（预填数字是示例，不是原表里的数）。税后板块是额外加的，原表里没有。</p>
+      <p class="panel-note"><strong>税后板块的口径</strong>：单身申报、只用标准扣除。401(k) 减联邦和 DC 的应税收入但<strong>不减 FICA</strong>；HSA 走工资扣除时连 FICA 一起减，不走工资扣除则只减所得税。</p>
+      <p class="panel-note"><strong>OBBBA 加班扣除</strong>（2025–2028 税年）：只有 <strong>FLSA 要求支付的加班</strong>才算——豁免（exempt）员工即使公司按 1.5 倍付了加班费，也不能扣，这时把开关切到「不计」。能扣的只是时薪一倍以上、至多 1.5 倍的那部分溢价（倍率更高时多出来的部分不算），上限 12,500；MAGI 超过 150,000 后，<strong>从扣除额里</strong>每满 1,000 美元减 100 美元（不足 1,000 的部分不计）。DC 是否跟随逐年在变、仍有争议：默认按 DC 首席财务官对 2026 年的说明计入，报税前以 OTR 当年的表格为准。</p>
+      <p class="panel-note"><strong>传统 IRA</strong>：有公司退休计划时，抵扣按 MAGI（<strong>不扣 IRA 本身</strong>）退坡，2026 年单身是 81,000–91,000；区间内按比例减少（取整到 10 美元，最少 200），超过终点就不可抵扣。不可抵扣的部分照样从到手里扣掉，只是不减税。</p>
     </div>
   </details>
 
 </main>
 
 <div class="toast hidden" id="toast"></div>
+<!-- Always in the tree, so what it is given is announced (see announce()). -->
+<div class="sr-only" id="srStatus" role="status" aria-live="polite"></div>
 
 <script src="motion.js"></script>
 <script src="ui.js"></script>
 <script src="select-menu.js"></script>
+<script src="model.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

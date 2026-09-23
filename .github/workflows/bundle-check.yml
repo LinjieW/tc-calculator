@@ -2,7 +2,7 @@
 # GitHub Pages serves it directly. That means the one thing CI has to protect is
 # that the committed bundle still matches its source — edit web/ and forget to
 # run ./build.sh, and Pages keeps serving the old app with no error anywhere.
-name: bundle is up to date
+name: bundle is up to date, model tests pass
 
 on:
   push:
@@ -26,3 +26,17 @@ jobs:
             exit 1
           fi
           echo "index.html matches web/ ($(wc -c < index.html) bytes)"
+
+  # The model (web/model.js) is plain JavaScript with no DOM, so it runs in node
+  # here in a second or two: every formula, the tax rules and the saved-state
+  # migration, against expected values computed independently. The full WKWebView
+  # suite (tools/checks.js) needs a Mac with a window server and runs locally.
+  model:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Model tests
+        run: node tools/model.test.js

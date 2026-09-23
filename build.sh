@@ -49,18 +49,21 @@ rm -rf "$APP/Contents/Resources/web"
 mkdir -p "$APP/Contents/Resources/web"
 cp "$ROOT"/web/*.html "$ROOT"/web/*.css "$ROOT"/web/*.js "$APP/Contents/Resources/web/"
 
-# The source workbook rides along so the app is self-describing about where its
-# numbers came from. Harmless if it is not there.
-if [ -f "$ROOT/OT_Compensation_Total_Package_Exhibit.xlsx" ]; then
-  cp "$ROOT/OT_Compensation_Total_Package_Exhibit.xlsx" "$APP/Contents/Resources/"
-fi
+# The source workbook does NOT ride along. It holds real compensation figures
+# (see .gitignore), and anything in Resources goes wherever the .app is copied,
+# AirDropped or zipped. The guard below refuses to finish a bundle that has one.
 
 # ---------------------------------------------------------------- icon
+# Rendered once and cached in build/: it is ~16s of pure-Python rasterising and
+# the output only changes when makeicon.py does.
 ICON_NAME=""
-if command -v python3 >/dev/null && command -v iconutil >/dev/null; then
+ICON_CACHE="$BUILD/AppIcon.icns"
+if [ -f "$ICON_CACHE" ] && [ "$ICON_CACHE" -nt "$ROOT/tools/makeicon.py" ]; then
+  cp "$ICON_CACHE" "$APP/Contents/Resources/AppIcon.icns" && ICON_NAME="AppIcon"
+elif command -v python3 >/dev/null && command -v iconutil >/dev/null; then
   say "生成图标"
-  if python3 "$ROOT/tools/makeicon.py" "$APP/Contents/Resources/AppIcon.icns" >/dev/null 2>&1; then
-    ICON_NAME="AppIcon"
+  if python3 "$ROOT/tools/makeicon.py" "$ICON_CACHE" >/dev/null 2>&1; then
+    cp "$ICON_CACHE" "$APP/Contents/Resources/AppIcon.icns" && ICON_NAME="AppIcon"
   else
     echo "    图标生成失败，跳过（不影响运行）"
   fi
@@ -119,6 +122,18 @@ printf 'APPL????' > "$APP/Contents/PkgInfo"
 # gate it. A signature is still worth having — it is what lets macOS keep the
 # app's identity stable across rebuilds, so window position, the saved theme and
 # any permissions stay attached to the same app instead of resetting each time.
+# ---------------------------------------------------------------- privacy guard
+# Nothing that can carry real figures may ship inside the bundle. Captured into a
+# variable rather than piped into `grep -q`: under pipefail, grep exiting on the
+# first match SIGPIPEs find once its output passes ~16 KB, and the guard passed.
+SHEETS=$(find "$APP" \( -iname '*.xls*' -o -iname '*.csv' -o -iname '*.tsv' \
+                       -o -iname '*.numbers' -o -iname '*.ods' \) -print)
+if [ -n "$SHEETS" ]; then
+  echo "refusing to sign: a spreadsheet ended up inside $APP" >&2
+  printf '%s\n' "$SHEETS" >&2
+  exit 1
+fi
+
 say "签名（ad-hoc）"
 codesign --force --sign - --timestamp=none "$APP" >/dev/null 2>&1 \
   || codesign --force --sign - "$APP"

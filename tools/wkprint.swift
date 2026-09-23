@@ -1,5 +1,10 @@
-//  wkprint.swift — render the page to a PDF exactly the way the app's Cmd+P does,
-//  with no panels, so the @media print rules can actually be looked at.
+//  wkprint.swift — render the page to a PDF through WKWebView's own print
+//  operation, with no panels, so the @media print rules can be looked at.
+//
+//  NOTE: this is NOT what the app's ⌘P does any more. Linked against the CLT's
+//  11.3 SDK, printOperation produces blank pages on this machine, so the app
+//  hands a snapshot to the default browser instead (see main.swift). This tool
+//  is only useful where that SDK bug does not bite.
 //
 //  Gotcha 19 ("the dark theme prints black") survives in real apps precisely
 //  because nobody ever runs this.

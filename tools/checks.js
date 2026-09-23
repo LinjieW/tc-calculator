@@ -10,7 +10,7 @@
      IRS / DC tables — never read back from the app, which is the only way an
      expectation proves anything.
 
-     They correspond to web/app.js's shipping DEFAULTS. If you change those, these
+     They correspond to the shipping DEFAULTS / TAX_DEFAULTS in web/model.js. If you change those, these
      have to be recomputed by hand: each one is sensitive to the order the display
      rounding happens in, so do not derive them by reading the app's own output —
      that turns this suite into a test that agrees with whatever the app does. */
@@ -23,7 +23,9 @@
     matchWithOT: 5901, matchNoOT: 5000, matchField: "5",
     at400hero: "$142,488", at400cash: "$132,846",
     base200kOtRate: "$144.23", base200kCash: "$261,692",
-    home: 68847, homeStr: "$68,847", taxStr: "$24,282",
+    /* DC follows the overtime deduction by default now (dcOtDed), so DC taxable
+       income is 93,128.85 - 16,100 - 6,009.62 = 71,019.23 -> DC 4,436.63. */
+    home: 69357, homeStr: "$69,357", taxStr: "$23,772",
     /* The marginal rate is FICA 7.65 + federal 22 + DC 8.5 = exactly 38.15%, which
        is a rounding TIE at one decimal. Whether it renders as 38.1 or 38.2 comes
        down to which side of 38.15 the floating-point subtraction lands on — the
@@ -31,12 +33,21 @@
        gives 38.2; neither is wrong. So this one is asserted as a number with a
        tolerance; a string equality here is a test that flakes on float noise. */
     margValue: 38.15, margTolerance: 0.06,
-    taxEff: "$30.60", taxOtNet: "$44.60", taxPerWeek: "$1,377",
+    /* 每加班小时净得 is measured, not otRate x (1 - marginal): one more OT hour
+       pays 72.1154, of which 24.0385 is qualified premium. FICA 7.65% of 72.1154
+       = 5.5168; federal 22% of (72.1154 - 24.0385) = 10.5769; DC 8.5% of the same
+       48.0769 = 4.0865. 72.1154 - 20.1802 = 51.9352. The old formula printed
+       $44.60 because it taxed the whole hour like an ordinary dollar. */
+    taxEff: "$30.83", taxOtNet: "$51.94", taxPerWeek: "$1,387",
     /* The OBBBA deduction here is 6,009.615 and both the with- and without-
-       deduction taxable incomes sit inside the 22% band, so removing it costs a
-       flat 22%. With other figures it can straddle 22%/24% — a flat marginal
-       band is a property of THESE numbers, not a general rule. */
-    otDeduction: 6009.615, otMarginalBand: 0.22,
+       deduction taxable incomes sit inside the 22% federal and 8.5% DC bands, so
+       removing it costs a flat 30.5% (DC follows it by default). With other
+       figures it can straddle a band edge — flat is a property of THESE numbers. */
+    otDeduction: 6009.615, otDedCostRate: 0.305, dcOtDedCost: 510.82,
+    /* IRA 7,500 with a workplace plan: MAGI before the IRA is 93,128.85, past the
+       2026 phase-out end of 91,000, so nothing is deductible and tax is unchanged
+       — take-home drops by the full 7,500. Not covered, all of it is deductible. */
+    iraCoveredHome: "$61,857", iraUncoveredHome: "$64,145",
     /* The bottom federal band is 12,400 wide, so 10% -> 20% costs 1,240.
        Independent of the assumptions: it is the tax table, not the salary. */
     bottomBandCost: 1240
@@ -60,6 +71,27 @@
     return last;
   }
 
+  function setVal(id, v) {
+    var el = document.getElementById(id);
+    el.value = String(v);
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+  function setCheck(id, on) {
+    var el = document.getElementById(id);
+    if (el.checked !== on) el.click();
+  }
+  async function resetEverything() {
+    document.querySelector('#precToggle button[data-prec="0"]').click();
+    document.getElementById("resetBtn").click();
+    document.getElementById("taxResetBtn").click();
+    setVal("c401k", 24500); setVal("cHsa", 4400); setVal("cIra", 0);
+    setCheck("cHsaPayroll", true); setCheck("cIraCovered", true);
+    ["ficaToggle", "otDedToggle", "dcOtDedToggle"].forEach(function (g) {
+      document.querySelector("#" + g + ' button[data-on="1"]').click();
+    });
+    await wait(350);
+  }
+
   function setSlider(h) {
     var sl = document.getElementById("hSlider");
     sl.value = String(h);
@@ -76,13 +108,14 @@
       await wait(200);
       var de = document.documentElement;
 
-      /* A file:// origin keeps its localStorage between runs, so without this the
-         suite starts from whatever the LAST run left behind and every hard-coded
-         expectation below is measuring the wrong model. Reset to the workbook
-         defaults first, and clear the store so the next run starts clean too. */
+      /* A file:// origin keeps its localStorage between runs, and the page has
+         already LOADED whatever the last run (or a person) left there before this
+         script starts. Clearing the store does not undo that, and 恢复默认 resets
+         only the assumptions — a leftover 精确 mode or tax edit made 16 checks fail.
+         So put EVERYTHING back through the UI: precision, assumptions, the tax
+         table, and the personal tax choices 恢复默认税表 deliberately keeps. */
       try { localStorage.removeItem("ot_calc_v1"); } catch (e) {}
-      document.getElementById("resetBtn").click();
-      await wait(350);
+      await resetEverything();
 
       /* ---- the kit actually wired up ---- */
       ok(typeof window.UIKit === "object", "UIKit missing");
@@ -180,7 +213,7 @@
       ok(matchNoOT === E.matchNoOT, "match without OT wrong", String(matchNoOT));
       ok(R.info.matchToggle.unit.indexOf("加班") === -1, "match unit label still claims OT is included",
          R.info.matchToggle.unit);
-      ok(R.info.matchToggle.note === "与原表不同", "off-book state not flagged", R.info.matchToggle.note);
+      ok(R.info.matchToggle.note === "与原表口径不同", "off-book state not flagged", R.info.matchToggle.note);
       /* the donut must follow the toggle */
       var afterToggleSum = [].map.call(document.querySelectorAll("#mixLegend .mix-val"), function (e) { return numTxt(e.textContent); })
         .reduce(function (a, b) { return a + b; }, 0);
@@ -691,10 +724,49 @@
       document.querySelector('#otDedToggle button[data-on="0"]').click();
       await wait(320);
       R.info.otToggle = { off: txtNum("tHome"), delta: E.home - txtNum("tHome") };
-      ok(Math.abs(R.info.otToggle.delta - E.otDeduction * E.otMarginalBand) < 2,
+      ok(Math.abs(R.info.otToggle.delta - E.otDeduction * E.otDedCostRate) < 2,
          "OBBBA toggle delta wrong", JSON.stringify(R.info.otToggle));
       document.querySelector('#otDedToggle button[data-on="1"]').click();
       await wait(320);
+
+      /* DC's own switch moves only the DC line, by the deduction at DC's 8.5% band. */
+      document.querySelector('#dcOtDedToggle button[data-on="0"]').click();
+      await wait(320);
+      R.info.dcOtToggle = { delta: E.home - txtNum("tHome"), note: document.getElementById("dcOtDedNote").textContent };
+      ok(Math.abs(R.info.dcOtToggle.delta - E.dcOtDedCost) < 2, "DC overtime-deduction switch delta wrong",
+         JSON.stringify(R.info.dcOtToggle));
+      document.querySelector('#dcOtDedToggle button[data-on="1"]').click();
+      await wait(320);
+      ok(txtNum("tHome") === E.home, "take-home did not return after re-enabling the DC switch", String(txtNum("tHome")));
+
+      /* The deduction's hint has to say who it is for. */
+      R.info.otHint = document.getElementById("otDedHint").textContent;
+      ok(/FLSA/.test(R.info.otHint) && /豁免/.test(R.info.otHint), "overtime-deduction hint lacks the FLSA caveat", R.info.otHint);
+
+      /* ---- traditional IRA phase-out (MAGI before the IRA, 81,000-91,000) ---- */
+      setVal("cIra", 7500);
+      await wait(320);
+      R.info.ira = { home: document.getElementById("tHome").textContent,
+                     hint: document.getElementById("iraHint").hidden ? "(hidden)" : document.getElementById("iraHint").textContent };
+      ok(R.info.ira.home === E.iraCoveredHome, "IRA with a workplace plan should not be deductible here", JSON.stringify(R.info.ira));
+      ok(/不可抵扣/.test(R.info.ira.hint), "IRA phase-out hint missing", R.info.ira.hint);
+      setCheck("cIraCovered", false);
+      await wait(320);
+      R.info.iraUncovered = document.getElementById("tHome").textContent;
+      ok(R.info.iraUncovered === E.iraUncoveredHome, "IRA without a workplace plan should be fully deductible", R.info.iraUncovered);
+      setCheck("cIraCovered", true);
+      setVal("cIra", 0);
+      await wait(320);
+
+      /* ---- contributions: over the limit is flagged, over the wages is flagged ---- */
+      setVal("c401k", 30000);
+      await wait(320);
+      R.info.contrib = document.getElementById("contribHint").hidden ? "(hidden)" : document.getElementById("contribHint").textContent;
+      ok(/上限/.test(R.info.contrib), "401(k) over its limit is not flagged", R.info.contrib);
+      setVal("c401k", 24500);
+      await wait(320);
+      ok(document.getElementById("contribHint").hidden, "contribution warning did not clear");
+      ok(txtNum("tHome") === E.home, "take-home did not return after the contribution checks", String(txtNum("tHome")));
 
       /* the bracket editor must be live */
       var fedRows = document.querySelectorAll("#fedBrackets tbody tr").length;
@@ -715,6 +787,206 @@
       document.getElementById("taxResetBtn").click();
       await wait(350);
       ok(txtNum("tHome") === E.home, "tax reset did not restore the defaults", String(txtNum("tHome")));
+
+      stage("fixes");
+      /* ---- regressions for defects found in review ---- */
+
+      /* At 0 hours only rows that stand for an hour may be "current". */
+      setSlider(0);
+      await wait(320);
+      R.info.currentAtZero = {
+        sched: document.querySelectorAll("#schedTable tbody tr.is-current").length,
+        waterfall: document.querySelectorAll("#waterfall tbody tr.is-current").length,
+        brackets: document.querySelectorAll(".bracket-table tbody tr.is-current").length
+      };
+      ok(R.info.currentAtZero.sched === 1 && R.info.currentAtZero.waterfall === 0 && R.info.currentAtZero.brackets === 0,
+         "rows without an hour were marked current at 0 h", JSON.stringify(R.info.currentAtZero));
+      setSlider(250);
+      await wait(320);
+
+      /* Leaving a tax field must not rebuild the bracket rows under the focus. */
+      var params = document.querySelector("details.tax-params");
+      params.open = true;
+      await wait(120);
+      var fedStd = document.getElementById("fedStd");
+      var firstTop = document.querySelector('#fedBrackets input[data-f="top"]');
+      fedStd.focus();
+      firstTop.focus();
+      await wait(60);
+      R.info.bracketFocus = { connected: firstTop.isConnected, active: document.activeElement === firstTop,
+                              tag: document.activeElement && document.activeElement.tagName };
+      ok(R.info.bracketFocus.connected && R.info.bracketFocus.active,
+         "moving from a tax field into the bracket table lost focus", JSON.stringify(R.info.bracketFocus));
+
+      /* Deleting a band keeps focus inside the table. */
+      var delBtn = document.querySelectorAll("#dcBrackets .br-del")[2];
+      delBtn.focus();
+      delBtn.click();
+      await wait(120);
+      R.info.afterDelete = { rows: document.querySelectorAll("#dcBrackets tbody tr").length,
+                             inTable: !!(document.activeElement && document.activeElement.closest &&
+                                         document.activeElement.closest("#dcBrackets")) };
+      ok(R.info.afterDelete.rows === 6 && R.info.afterDelete.inTable, "deleting a band dropped focus",
+         JSON.stringify(R.info.afterDelete));
+
+      /* A ceiling out of order is reported, not silently skipped. */
+      var tops = document.querySelectorAll('#fedBrackets input[data-f="top"]');
+      tops[2].value = "30000";
+      tops[2].dispatchEvent(new Event("input", { bubbles: true }));
+      await wait(200);
+      R.info.brHint = document.getElementById("fedBrHint").hidden ? "(hidden)" : document.getElementById("fedBrHint").textContent;
+      ok(/第 3 档/.test(R.info.brHint), "out-of-order bracket ceiling not reported", R.info.brHint);
+      document.getElementById("taxResetBtn").click();
+      await wait(350);
+      ok(document.getElementById("fedBrHint").hidden, "bracket warning did not clear after the table reset");
+      ok(txtNum("tHome") === E.home, "tax table reset did not restore take-home", String(txtNum("tHome")));
+      params.open = false;
+
+      /* 恢复默认 is undoable. */
+      setVal("aBase", 123456);
+      await wait(250);
+      document.getElementById("resetBtn").click();
+      await wait(250);
+      var act = document.getElementById("resetUndo");
+      R.info.undo = { shown: !!act && !act.hidden, afterReset: document.getElementById("aBase").value };
+      if (act && !act.hidden) { act.click(); await wait(250); }
+      R.info.undo.afterUndo = document.getElementById("aBase").value;
+      R.info.undo.focusBack = document.activeElement && document.activeElement.id;
+      ok(R.info.undo.shown && R.info.undo.afterReset === "100000" && R.info.undo.afterUndo === "123456" &&
+         R.info.undo.focusBack === "resetBtn", "reset could not be undone", JSON.stringify(R.info.undo));
+      document.getElementById("resetBtn").click();
+      await wait(300);
+
+      /* A jump to the hour already selected must not leave a focus restore armed
+         that fires on the next, unrelated render. */
+      var curJump = document.querySelector('#schedTable .hjump[data-h="250"]');
+      curJump.focus();
+      curJump.click();
+      await wait(120);
+      var aBaseEl = document.getElementById("aBase");
+      aBaseEl.focus();
+      setVal("aBase", 100001);
+      await wait(200);
+      R.info.noopJump = document.activeElement && (document.activeElement.id || document.activeElement.className);
+      ok(document.activeElement === aBaseEl, "a no-op row jump stole focus on the next render", String(R.info.noopJump));
+      setVal("aBase", 100000);
+      await wait(200);
+
+      /* Escape closes the info popover but leaves focus on its anchor. */
+      var anchor = document.querySelector(".pop-anchor");
+      anchor.focus();
+      await wait(80);
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      await wait(200);
+      R.info.popEsc = { focus: document.activeElement === anchor,
+                        vis: getComputedStyle(anchor.querySelector(".popover")).visibility };
+      ok(R.info.popEsc.focus && R.info.popEsc.vis === "hidden", "Escape on the popover moved focus or left it open",
+         JSON.stringify(R.info.popEsc));
+      anchor.blur();
+
+      /* The select's chevron survives the dark theme and focus. */
+      AppBridge.toggleTheme();
+      await wait(300);
+      document.getElementById("aStep").focus();
+      R.info.chevronDark = getComputedStyle(document.getElementById("aStep")).backgroundImage.slice(0, 16);
+      document.getElementById("aStep").blur();
+      AppBridge.toggleTheme();
+      await wait(300);
+      ok(/gradient/.test(R.info.chevronDark), "select chevron vanished in dark theme with focus", R.info.chevronDark);
+
+      /* Messages reach assistive technology through a live region that is always
+         in the tree. */
+      var sr = document.getElementById("srStatus");
+      R.info.srStatus = sr ? { role: sr.getAttribute("role"), text: sr.textContent } : null;
+      ok(sr && sr.getAttribute("role") === "status" && /恢复/.test(sr.textContent),
+         "toast text did not reach the live region", JSON.stringify(R.info.srStatus));
+
+      /* Standard hours 0: the dial note names the real cause, and the field is marked. */
+      setVal("aHours", 0);
+      await wait(250);
+      R.info.zeroHours = { note: document.getElementById("dialNote").textContent,
+                           invalid: document.getElementById("aHours").getAttribute("aria-invalid") };
+      ok(/标准年工时/.test(R.info.zeroHours.note) && R.info.zeroHours.invalid === "true",
+         "standard hours 0 is not reported at the field / in the dial note", JSON.stringify(R.info.zeroHours));
+      document.getElementById("resetBtn").click();
+      await wait(300);
+      ok(document.getElementById("aHours").getAttribute("aria-invalid") === null, "invalid mark did not clear");
+
+      /* Phones: the three tables stay tables (the stacked cards dropped their last
+         label and doubled the page), and the pinned hour column is opaque. */
+      R.info.tableDisplay = ["waterfall", "revTable", "schedTable"].map(function (id) {
+        return getComputedStyle(document.querySelector("#" + id + " tbody td")).display;
+      });
+      ok(R.info.tableDisplay.every(function (d) { return d === "table-cell"; }),
+         "a table is still stacked into cards", JSON.stringify(R.info.tableDisplay));
+
+      /* The compact bar slot carries the live answer once the title scrolls away,
+         and the bar stays one row. */
+      await scrollSettled(700);
+      await wait(150);
+      var tb = document.querySelector(".topbar");
+      R.info.liveBar = { shown: tb.classList.contains("title-shown"), text: document.getElementById("topbarTitle").textContent,
+                         hero: document.getElementById("heroVal").textContent, h: tb.offsetHeight };
+      ok(R.info.liveBar.shown && R.info.liveBar.text.indexOf(R.info.liveBar.hero) !== -1 &&
+         R.info.liveBar.text.indexOf(E.homeStr) !== -1, "top bar does not carry the live figures", JSON.stringify(R.info.liveBar));
+      ok(R.info.liveBar.h <= 64, "top bar wrapped to two rows", String(R.info.liveBar.h));
+      await scrollSettled(0);
+
+      /* Small print meets WCAG AA in both themes. Colours are measured, and a
+         translucent background is composited over the one below it. */
+      function rgba(str) {
+        var m = /rgba?\(([^)]+)\)/.exec(str);
+        if (m) { var p = m[1].split(/[ ,\/]+/).filter(Boolean).map(Number); return [p[0], p[1], p[2], p.length > 3 ? p[3] : 1]; }
+        m = /color\(srgb ([^)]+)\)/.exec(str);
+        if (m) { var q2 = m[1].split(/[ \/]+/).filter(Boolean).map(Number); return [q2[0] * 255, q2[1] * 255, q2[2] * 255, q2.length > 3 ? q2[3] : 1]; }
+        return null;
+      }
+      function bgBehind(el) {
+        var stack = [];
+        for (var n = el; n && n.nodeType === 1; n = n.parentElement) {
+          var c = rgba(getComputedStyle(n).backgroundColor);
+          if (c && c[3] > 0) { stack.push(c); if (c[3] >= 1) break; }
+        }
+        var out = [255, 255, 255];
+        for (var i = stack.length - 1; i >= 0; i--) {
+          var a = stack[i][3];
+          out = [0, 1, 2].map(function (k) { return stack[i][k] * a + out[k] * (1 - a); });
+        }
+        return out;
+      }
+      function relLum(c) {
+        return [0, 1, 2].map(function (k) { var v = c[k] / 255; return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); })
+          .reduce(function (acc, v, k) { return acc + v * [0.2126, 0.7152, 0.0722][k]; }, 0);
+      }
+      function contrastOf(el) {
+        var fg = rgba(getComputedStyle(el).color), bg = bgBehind(el);
+        if (!fg) return NaN;
+        var l1 = relLum(fg), l2 = relLum(bg);
+        return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
+      }
+      var SMALL = [".s-lab", ".metric .lab", ".metric .note", ".tick span", ".lede", ".panel-note", ".tax-sub",
+                   ".mix-pct", "#schedTable th", ".field > label", ".stat .lab"];
+      async function worstContrast() {
+        var worst = { ratio: 99, sel: "" };
+        SMALL.forEach(function (sel) {
+          var el = document.querySelector(sel);
+          if (!el || !el.offsetParent) return;
+          var r = contrastOf(el);
+          if (r < worst.ratio) worst = { ratio: Math.round(r * 100) / 100, sel: sel };
+        });
+        return worst;
+      }
+      var themeNow = document.documentElement.dataset.theme;
+      R.info.contrast = {};
+      R.info.contrast[themeNow] = await worstContrast();
+      AppBridge.toggleTheme();
+      await wait(400);
+      R.info.contrast[document.documentElement.dataset.theme] = await worstContrast();
+      AppBridge.toggleTheme();
+      await wait(400);
+      Object.keys(R.info.contrast).forEach(function (th) {
+        ok(R.info.contrast[th].ratio >= 4.5, "small text below 4.5:1 in " + th + " theme", JSON.stringify(R.info.contrast[th]));
+      });
 
       stage("print");
       /* ---- print ----

@@ -47,13 +47,8 @@ final class AppController: NSObject, NSApplicationDelegate, WKNavigationDelegate
         let cfg = WKWebViewConfiguration()
         let controller = WKUserContentController()
 
-        // Tell the page it is running inside the app BEFORE any of its own script
-        // runs, so app.js can decide once whether the save bridge exists instead of
-        // probing for it later.
-        controller.addUserScript(WKUserScript(
-            source: "window.__NATIVE_HOST__ = true;",
-            injectionTime: .atDocumentStart,
-            forMainFrameOnly: true))
+        // The page detects the host by the presence of this handler
+        // (window.webkit.messageHandlers.app), so nothing else is injected.
         controller.add(self, name: "app")
         cfg.userContentController = controller
         cfg.suppressesIncrementalRendering = false
@@ -65,10 +60,10 @@ final class AppController: NSObject, NSApplicationDelegate, WKNavigationDelegate
         // between window-open and first paint is a white flash in dark mode.
         webView.setValue(false, forKey: "drawsBackground")
 
-        // Right-click > Reload etc. are useful while iterating and harmless here.
-        if webView.responds(to: Selector(("setAllowsBackForwardNavigationGestures:"))) {
-            webView.allowsBackForwardNavigationGestures = false
-        }
+        // A two-finger swipe must not navigate "back" out of the app's only page.
+        webView.allowsBackForwardNavigationGestures = false
+        // Pinch-to-zoom from the start, not only after the first menu zoom.
+        webView.allowsMagnification = true
 
         // NOT .fullSizeContentView. Extending the content under the title bar looks
         // seamless in a screenshot and is wrong to use: the traffic lights would sit
@@ -88,7 +83,11 @@ final class AppController: NSObject, NSApplicationDelegate, WKNavigationDelegate
         window.minSize = NSSize(width: 420, height: 480)
         window.delegate = self
         window.contentView = webView
-        applyWindowTheme(dark: false)   // replaced the moment the page reports its theme
+        // Start in the SYSTEM appearance. The page picks its theme from
+        // prefers-color-scheme on a first launch, and that media query reads this
+        // window's appearance — pinning it to light here made every first launch
+        // light, even in Dark Mode. The page's own report replaces it a moment later.
+        applyWindowTheme(dark: NSApp.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua)
 
         // setFrameAutosaveName only names the slot; setFrameUsingName is what reads
         // it back, and it returns false when nothing has been stored yet. Calling
@@ -278,13 +277,18 @@ final class AppController: NSObject, NSApplicationDelegate, WKNavigationDelegate
 
     // MARK: zoom
 
-    @objc func zoomIn(_ sender: Any?) { setZoom(webView.magnification + 0.1) }
-    @objc func zoomOut(_ sender: Any?) { setZoom(webView.magnification - 0.1) }
+    // pageZoom, not magnification: magnification scales the rendered page without
+    // re-laying it out, so at 150% a third of the window was simply cropped off.
+    // pageZoom is text-zoom-like — the layout reflows to the new size.
+    @objc func zoomIn(_ sender: Any?) { setZoom(webView.pageZoom + 0.1) }
+    @objc func zoomOut(_ sender: Any?) { setZoom(webView.pageZoom - 0.1) }
     @objc func zoomActual(_ sender: Any?) { setZoom(1.0) }
 
+    // A pinch sets magnification, which scales without reflowing; menu zoom takes
+    // over from it rather than stacking on top of it, so ⌘0 really means 100%.
     private func setZoom(_ value: CGFloat) {
-        webView.allowsMagnification = true
-        webView.magnification = min(max(value, 0.6), 2.0)
+        webView.magnification = 1.0
+        webView.pageZoom = min(max(value, 0.6), 2.0)
     }
 
     // MARK: menu
@@ -297,7 +301,10 @@ final class AppController: NSObject, NSApplicationDelegate, WKNavigationDelegate
         let appMenu = NSMenu()
         appMenu.addItem(withTitle: "关于 \(kAppName)", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
         appMenu.addItem(.separator())
-        add(appMenu, "恢复默认假设", #selector(resetAssumptions(_:)), "r", [.command, .shift])
+        // No key equivalent on purpose: ⌘⇧R sat one modifier away from ⌘R reload
+        // and overwrote the typed-in figures. The page's own reset is undoable; a
+        // menu item you have to reach for is enough.
+        add(appMenu, "恢复默认假设", #selector(resetAssumptions(_:)), "", [])
         appMenu.addItem(.separator())
         appMenu.addItem(withTitle: "隐藏 \(kAppName)", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
         let hideOthers = NSMenuItem(title: "隐藏其他", action: #selector(NSApplication.hideOtherApplications(_:)), keyEquivalent: "h")
@@ -373,18 +380,27 @@ final class AppController: NSObject, NSApplicationDelegate, WKNavigationDelegate
 
     // MARK: navigation policy
 
-    // Everything this app shows is in the bundle. A link to anywhere else opens in
-    // the user's browser rather than replacing the app's own UI with a web page.
+    // Everything this app shows is in the bundle's web/ folder, and only that may
+    // load here. "Any file URL" was not a safe stand-in: dropping a file on the
+    // window navigates to it (as .other, not .linkActivated), so a dropped HTML
+    // page replaced the app AND got the native bridge and this origin's
+    // localStorage — the saved figures. A link the user actually clicked to
+    // somewhere else opens in their browser; anything else is refused.
     func webView(_ webView: WKWebView,
                  decidePolicyFor navigationAction: WKNavigationAction,
                  decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
-        guard let url = navigationAction.request.url else { decisionHandler(.allow); return }
+        guard let url = navigationAction.request.url else { decisionHandler(.cancel); return }
         if url.isFileURL {
-            decisionHandler(.allow)
-        } else {
-            NSWorkspace.shared.open(url)
-            decisionHandler(.cancel)
+            let webDir = Bundle.main.resourceURL?.appendingPathComponent("web").standardizedFileURL.path ?? ""
+            let path = url.standardizedFileURL.path
+            decisionHandler(!webDir.isEmpty && (path == webDir || path.hasPrefix(webDir + "/")) ? .allow : .cancel)
+            return
         }
+        if navigationAction.navigationType == .linkActivated,
+           let scheme = url.scheme?.lowercased(), ["http", "https", "mailto"].contains(scheme) {
+            NSWorkspace.shared.open(url)
+        }
+        decisionHandler(.cancel)
     }
 }
 

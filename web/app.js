@@ -1,135 +1,34 @@
 /* ============================================================
-   app.js — the compensation model and the page wiring.
+   app.js — the page: formatting, rendering and input wiring.
 
-   The model is a line-for-line port of the Backup sheet in
-   OT_Compensation_Total_Package_Exhibit.xlsx. Every formula below carries the
-   cell it came from, because that sheet is the spec and this file is the only
-   place the two can drift apart.
+   The model itself (the workbook's formulas, the tax rules, what a saved blob
+   means) is web/model.js, which loads first and which tools/model.test.js runs
+   in node.
    ============================================================ */
 (function () {
   "use strict";
 
+  /* The model — every formula, the tax rules, and what a saved blob means — is
+     web/model.js, loaded first. This file is the page: formatting, rendering,
+     and wiring the inputs to the model. */
+  var M = window.OTModel;
+  var DEFAULTS = M.DEFAULTS, STEPS = M.STEPS, TAX_DEFAULTS = M.TAX_DEFAULTS;
+  var clone = M.clone, rates = M.rates, workWeeks = M.workWeeks, compute = M.compute;
+  var hoursForTarget = M.hoursForTarget, schedule = M.schedule;
+  var computeTax = M.computeTax, marginalRate = M.marginalRate, otNetPerHour = M.otNetPerHour;
+
   /* ---------- storage ---------- */
 
+  /* The key predates the version stamp that now lives INSIDE the blob (see
+     serializeState); it is kept so that figures saved by earlier builds carry
+     over instead of vanishing. */
   var STORE = "ot_calc_v1";
 
-  /* ILLUSTRATIVE STARTING VALUES — round numbers, not anybody's package.
-     The structure and every formula below come from the workbook's Backup sheet
-     (cells noted per line); the VALUES are deliberately generic, because this
-     repo is public and a calculator whose defaults are the author's real salary
-     publishes that salary. Type your own in the 假设 panel once — they are kept
-     in this browser's localStorage and never leave the device.
-
-     If you do change these, the acceptance suite's expected constants have to
-     change with them — the E block at the top of tools/checks.js. Recompute them
-     from the formulas, not from what this app prints. */
-  var DEFAULTS = {
-    base: 100000,      // Backup!B5  base salary, $/yr
-    stdHours: 2080,    // Backup!B6  standard annual hours
-    otMult: 1.5,       // Backup!B7  OT multiplier
-    bonus: 4000,       // Backup!B8  fixed year-end bonus, $/yr
-    matchPct: 0.05,    // Backup!B9  401(k) employer match, % of (base + OT pay)
-    profitPct: 0.02,   // Backup!B10 profit share, % of base
-    stipend: 1200,     // Backup!B11 mobile stipend, $/yr
-    /* Paid time off. The workbook has no such row, and adding it changes no
-       dollar figure anywhere: PTO is already inside the salary, so base, OT pay,
-       total package, the 401(k) match and every tax number are identical with or
-       without it. What it does change is the two things that depend on how many
-       hours you ACTUALLY work — the effective rate per worked hour, and how many
-       weeks are left to fit overtime into. */
-    ptoHours: 80,      // 2 weeks
-    step: 25,          // Backup!B12 display step, hours
-    maxH: 625,         // Backup!B13 maximum OT hours shown
-    /* Whether overtime pay counts as eligible compensation for the employer
-       match. 1/0 rather than true/false on purpose: load() coerces every saved
-       assumption with Number() and drops anything non-finite, so a boolean would
-       silently fail to restore. The workbook includes OT, so 1 is the default. */
-    matchOT: 1
-  };
-
-  var STEPS = [10, 25, 50, 100];
-
-  /* ---------- tax defaults ----------
-     2026, single filer. Every one of these is editable in the UI, because the
-     point is that next January you look the new numbers up and type them in —
-     not that you trust a constant baked in by whoever wrote this.
-
-       Federal brackets + standard deduction  IRS Rev. Proc. 2025-32
-       DC brackets                            DC OTR, unchanged since 2022 (not indexed)
-       DC standard deduction                  DC OTR 2026 D-40ES booklet
-       Social Security wage base              SSA, 2026
-       401(k) / IRA / HSA limits              IRS, 2026
-       Overtime deduction                     OBBBA, in force 2025-2028
-
-     A bracket's first element is the top of that band; null means "and everything
-     above". Rates are percentages, the way they are written down and the way the
-     fields accept them. */
-  var TAX_DEFAULTS = {
-    year: 2026,
-    fedStd: 16100,
-    dcStd: 16100,
-    fedBrackets: [[12400, 10], [50400, 12], [105700, 22], [201775, 24],
-                  [256225, 32], [640600, 35], [null, 37]],
-    dcBrackets: [[10000, 4], [40000, 6], [60000, 6.5], [250000, 8.5],
-                 [500000, 9.25], [1000000, 9.75], [null, 10.75]],
-    fica: 1,
-    ssRate: 6.2,
-    ssBase: 184500,
-    medRate: 1.45,
-    addMedRate: 0.9,
-    addMedThr: 200000,      // not indexed; fixed at $200k for single filers
-    otDed: 1,
-    otCap: 12500,
-    otPhase: 150000,
-    c401k: 24500,           // prefilled at the limit, as asked
-    c401kLimit: 24500,
-    hsa: 4400,              // self-only, prefilled at the limit
-    hsaLimit: 4400,
-    hsaPayroll: 1,
-    ira: 0,
-    iraLimit: 7500
-  };
-
-  var TAX_NUM = ["year", "fedStd", "dcStd", "fica", "ssRate", "ssBase", "medRate",
-                 "addMedRate", "addMedThr", "otDed", "otCap", "otPhase",
-                 "c401k", "c401kLimit", "hsa", "hsaLimit", "hsaPayroll", "ira", "iraLimit"];
-
-  var state = {
-    a: clone(DEFAULTS),
-    t: cloneTax(TAX_DEFAULTS),
-    h: 250,
-    prec: 0,           // decimal places for money; 0 = whole dollars, 2 = cents
-    target: 25         // reverse-lookup target, in PERCENT (25 = 25%)
-  };
-
-  /* The bracket arrays are nested, so a shallow clone would hand every reset the
-     same rows the user had already edited. */
-  function cloneTax(o) {
-    var r = clone(o);
-    r.fedBrackets = o.fedBrackets.map(function (b) { return [b[0], b[1]]; });
-    r.dcBrackets = o.dcBrackets.map(function (b) { return [b[0], b[1]]; });
-    return r;
-  }
-
-  /* A stored bracket table is the one piece of saved state with a shape that can
-     be wrong rather than just out of range, so it is validated rather than
-     trusted: pairs only, finite non-negative rate, ceiling a number or null. */
-  function sanitizeBrackets(raw, fallback) {
-    if (!raw || !raw.length || typeof raw.length !== "number") return fallback;
-    var out = [];
-    for (var i = 0; i < raw.length; i++) {
-      var row = raw[i];
-      if (!row || row.length < 2) continue;
-      var top = row[0] === null || row[0] === undefined ? null : Number(row[0]);
-      var rate = Number(row[1]);
-      if (top !== null && (!isFinite(top) || top < 0)) continue;
-      if (!isFinite(rate) || rate < 0) continue;
-      out.push([top, rate]);
-    }
-    return out.length ? out : fallback;
-  }
-
-  function clone(o) { var r = {}, k; for (k in o) if (o.hasOwnProperty(k)) r[k] = o[k]; return r; }
+  var state = M.freshState();
+  /* Set by load() when the saved tax table was older than this build's defaults
+     and has just been replaced by them; the page says so once, after the first
+     render. */
+  var taxUpdatedFrom = null, taxMoved = [];
 
   function load() {
     var raw;
@@ -137,201 +36,16 @@
     if (!raw) return;
     var saved;
     try { saved = JSON.parse(raw); } catch (e) { return; }
-    if (!saved || typeof saved !== "object") return;
-    if (saved.a && typeof saved.a === "object") {
-      for (var k in DEFAULTS) {
-        if (!DEFAULTS.hasOwnProperty(k)) continue;
-        var v = Number(saved.a[k]);
-        if (isFinite(v)) state.a[k] = v;
-      }
-    }
-    if (saved.t && typeof saved.t === "object") {
-      for (var j = 0; j < TAX_NUM.length; j++) {
-        var tk = TAX_NUM[j], tv = Number(saved.t[tk]);
-        if (isFinite(tv)) state.t[tk] = tv;
-      }
-      state.t.fedBrackets = sanitizeBrackets(saved.t.fedBrackets, state.t.fedBrackets);
-      state.t.dcBrackets = sanitizeBrackets(saved.t.dcBrackets, state.t.dcBrackets);
-    }
-    if (isFinite(Number(saved.h))) state.h = Math.max(0, Number(saved.h));
-    if (saved.prec === 2 || saved.prec === 0) state.prec = saved.prec;
-    if (isFinite(Number(saved.target))) state.target = Number(saved.target);
-    if (STEPS.indexOf(state.a.step) === -1) state.a.step = DEFAULTS.step;
+    var s = M.restoreState(saved);
+    taxUpdatedFrom = s.taxUpdatedFrom;
+    taxMoved = s.taxMoved;
+    delete s.taxUpdatedFrom;
+    delete s.taxMoved;
+    state = s;
   }
 
   function save() {
-    try { localStorage.setItem(STORE, JSON.stringify(state)); } catch (e) { /* private window, quota */ }
-  }
-
-  /* ---------- the model ----------
-     Backup!B16..B18 (derived rates) and Backup!A22:I47 (the schedule).
-     Guarded: base or stdHours at 0 makes three of these divisions undefined, and
-     an Infinity rendered as "$Infinity" is worse than an honest dash. */
-
-  function rates(a) {
-    /* Still base / 2080, deliberately. The overtime regular rate is the salary
-       divided by the hours the salary is meant to cover, and PTO does not shrink
-       that — dividing by 1,920 would INFLATE the OT rate, which is both wrong and
-       flattering. PTO shows up further down, as the effective rate on hours
-       actually worked. */
-    var stdHourly = a.stdHours > 0 ? a.base / a.stdHours : NaN;   // Backup!B16 =B5/B6
-    return {
-      stdHourly: stdHourly,
-      otHourly: stdHourly * a.otMult,                             // Backup!B17 =B16*B7
-      profit: a.base * a.profitPct                                // Backup!B18 =B5*B10
-    };
-  }
-
-  /* Weeks actually available to work in, after PTO. NaN rather than a clamped
-     number when the assumptions make it meaningless (PTO at or beyond a full
-     year): a plausible-looking wrong divisor is worse than a dash plus a
-     warning. */
-  function workWeeks(a) {
-    if (!(a.stdHours > 0)) return NaN;
-    var perWeek = a.stdHours / 52;
-    var w = 52 - (Math.max(0, a.ptoHours || 0) / perWeek);
-    return w >= 0.5 ? w : NaN;
-  }
-
-  /* Annual hours actually worked, PTO removed and overtime added. */
-  function workedHours(a, h) {
-    var base = a.stdHours - Math.max(0, a.ptoHours || 0);
-    return base > 0 ? base + h : NaN;
-  }
-
-  function compute(a, h) {
-    var r = rates(a);
-    var otPay = h * r.otHourly;                                   // =A22*$B$17
-    var variable = otPay + a.bonus;                               // =B22+$B$8
-    var cash = a.base + variable;                                 // =$B$5+C22
-    /* Backup!F22 = $B$9*($B$5+B22) — the workbook's match base is base + OT pay.
-       With matchOT off the base is salary only, which is how plans that exclude
-       overtime from eligible compensation actually work. */
-    var match = a.matchPct * (a.base + (a.matchOT ? otPay : 0));
-    var benefits = match + r.profit + a.stipend;
-    return {
-      h: h,
-      stdHourly: r.stdHourly,
-      otHourly: r.otHourly,
-      otPay: otPay,
-      variable: variable,
-      eqBonus: a.base > 0 ? variable / a.base : NaN,              // =C22/$B$5
-      cash: cash,
-      match: match,
-      profit: r.profit,                                           // =$B$18
-      stipend: a.stipend,                                         // =$B$11
-      benefits: benefits,
-      total: cash + benefits,                                     // =E22+F22+G22+H22
-      /* Not from the workbook — see ptoHours. */
-      workedHours: workedHours(a, h),
-      effHourly: cash / workedHours(a, h),
-      ptoValue: Math.max(0, a.ptoHours || 0) * r.stdHourly
-    };
-  }
-
-  /* Excel ROUND() is half-AWAY-from-zero; JS Math.round() is half-UP. They agree
-     only for non-negative values — which MAX(0,...) guarantees here, but the
-     helper states the rule rather than relying on the caller remembering it. */
-  function roundHalfAway(v) { return v < 0 ? -Math.round(-v) : Math.round(v); }
-
-  /* Backup!B52 =ROUND(MAX(0,(A52*$B$5-$B$8)/$B$17),0)  — target is a FRACTION here. */
-  function hoursForTarget(a, targetFrac) {
-    var r = rates(a);
-    if (!(r.otHourly > 0)) return NaN;
-    return roundHalfAway(Math.max(0, (targetFrac * a.base - a.bonus) / r.otHourly));
-  }
-
-  function schedule(a) {
-    var rows = [], step = a.step > 0 ? a.step : 25, h = 0;
-    var max = a.maxH > 0 ? a.maxH : 0;
-    /* Hard cap: a 1-hour step against a 100k-hour ceiling would otherwise build a
-       table nobody asked for and freeze the window while doing it. */
-    var limit = 400;
-    while (h <= max && rows.length < limit) { rows.push(compute(a, h)); h += step; }
-    return rows;
-  }
-
-  /* ---------- tax ----------
-     Deliberately downstream of everything above: computeTax() READS a pre-tax
-     result and never feeds back into it, so the workbook model stays exactly what
-     the workbook says no matter what happens in here. */
-
-  function bracketTax(income, brackets) {
-    if (!(income > 0)) return 0;
-    var tax = 0, lower = 0;
-    for (var i = 0; i < brackets.length; i++) {
-      var top = brackets[i][0];
-      var ceiling = (top === null || top === undefined || !isFinite(top)) ? Infinity : top;
-      if (ceiling <= lower) continue;                 // a ceiling below the band start is not a band
-      var slice = Math.min(income, ceiling) - lower;
-      if (slice <= 0) break;
-      tax += slice * (brackets[i][1] / 100);
-      lower = ceiling;
-      if (!isFinite(ceiling)) break;
-    }
-    /* Income above the last finite ceiling with no open-ended band would simply
-       go untaxed, which is a silent wrong answer — tax it at the top rate. */
-    if (income > lower && brackets.length) tax += (income - lower) * (brackets[brackets.length - 1][1] / 100);
-    return tax;
-  }
-
-  function computeTax(c, a, t) {
-    var wages = c.cash;                                  // base + OT + bonus
-    var k401 = Math.max(0, t.c401k || 0);
-    var hsa = Math.max(0, t.hsa || 0);
-    var ira = Math.max(0, t.ira || 0);
-    var hsaPayroll = !!t.hsaPayroll;
-
-    /* 401(k) deferrals do NOT reduce Social Security or Medicare wages; a
-       cafeteria-plan HSA deduction does. That asymmetry is the whole reason the
-       HSA question is a checkbox and not a footnote. */
-    var ficaWages = Math.max(0, wages - (hsaPayroll ? hsa : 0));
-    var ss = Math.min(ficaWages, Math.max(0, t.ssBase)) * (t.ssRate / 100);
-    var med = ficaWages * (t.medRate / 100) +
-              Math.max(0, ficaWages - t.addMedThr) * (t.addMedRate / 100);
-    var fica = t.fica ? ss + med : 0;
-
-    var fedWages = Math.max(0, wages - k401 - (hsaPayroll ? hsa : 0));
-    var agi = Math.max(0, fedWages - ira - (hsaPayroll ? 0 : hsa));
-
-    /* Only the PREMIUM half of time-and-a-half qualifies, not the whole overtime
-       payment: at 1.5x that is one third of OT pay. */
-    var otPremium = Math.max(0, c.h * c.stdHourly * (a.otMult - 1));
-    var over = Math.max(0, agi - t.otPhase);
-    /* $100 for each $1,000 over the threshold, a partial $1,000 counting as a
-       whole one. */
-    var cap = Math.max(0, t.otCap - Math.ceil(over / 1000) * 100);
-    var otDeduction = t.otDed ? Math.min(otPremium, cap) : 0;
-
-    var fedTaxable = Math.max(0, agi - t.fedStd - otDeduction);
-    /* DC starts from federal AGI and does not conform to the overtime deduction. */
-    var dcTaxable = Math.max(0, agi - t.dcStd);
-
-    var fedTax = bracketTax(fedTaxable, t.fedBrackets);
-    var dcTax = bracketTax(dcTaxable, t.dcBrackets);
-    var totalTax = fedTax + dcTax + fica;
-
-    return {
-      wages: wages, k401: k401, hsa: hsa, ira: ira,
-      fica: fica, ss: ss, med: med, ficaWages: ficaWages,
-      agi: agi, otPremium: otPremium, otCap: cap, otDeduction: otDeduction,
-      fedTaxable: fedTaxable, dcTaxable: dcTaxable,
-      fedTax: fedTax, dcTax: dcTax, totalTax: totalTax,
-      takeHome: wages - k401 - hsa - ira - totalTax,
-      effRate: wages > 0 ? totalTax / wages : NaN
-    };
-  }
-
-  /* The rate on the NEXT dollar of wages, measured rather than derived from the
-     bracket table — that way it automatically accounts for FICA, the wage base,
-     additional Medicare and the overtime phase-out all at once. */
-  function marginalRate(c, a, t) {
-    var step = 1000;
-    var bumped = {};
-    for (var k in c) if (c.hasOwnProperty(k)) bumped[k] = c[k];
-    bumped.cash = c.cash + step;
-    var lo = computeTax(c, a, t), hi = computeTax(bumped, a, t);
-    return (hi.totalTax - lo.totalTax) / step;
+    try { localStorage.setItem(STORE, M.serializeState(state)); } catch (e) { /* private window, quota */ }
   }
 
   /* ---------- formatting ---------- */
@@ -437,6 +151,58 @@
   function on(el, ev, fn) { if (el) el.addEventListener(ev, fn); }
   function txt(id, s) { var e = $(id); if (e) e.textContent = s; }
 
+  /* Every message the page speaks goes through here. The kit's toast element is
+     display:none between messages and gets its text in the same task that
+     reveals it, which screen readers do not reliably announce; a visually hidden
+     status region that is always in the tree does. Messages from one render are
+     QUEUED and spoken together — two calls in a row used to overwrite each other
+     before either was read. The region is cleared first and refilled a beat
+     later, so the same message twice in a row is still announced. */
+  var announceQueue = [], announceTimer = null;
+  function announce(msg) {
+    var r = $("srStatus");
+    if (!r || !msg) return;
+    if (announceQueue.indexOf(msg) === -1) announceQueue.push(msg);
+    if (announceTimer) return;
+    r.textContent = "";
+    announceTimer = setTimeout(function () {
+      r.textContent = announceQueue.join(" ");
+      announceQueue = [];
+      announceTimer = null;
+    }, 30);
+  }
+
+  function toast(msg, bad) {
+    var el = UIKit.toast(msg, !!bad);
+    announce(msg);
+    return el;
+  }
+
+  /* 撤销 lives next to the button that did the reset, not inside the toast: the
+     kit's toast leaves on a fixed 3.6 s timer whether or not it has focus, and it
+     sits at the end of the page — 14 to 54 Tab stops away. Here it is the very
+     next stop after the reset button, and it stays for 10 s. Undo hands focus
+     back to the reset button. */
+  var undoTimers = {};
+  function offerUndo(btnId, resetBtnId, run) {
+    var b = $(btnId);
+    if (!b) return;
+    clearTimeout(undoTimers[btnId]);
+    b.hidden = false;
+    b.onclick = function () {
+      clearTimeout(undoTimers[btnId]);
+      b.hidden = true;
+      run();
+      var r = $(resetBtnId);
+      if (r) r.focus();
+    };
+    undoTimers[btnId] = setTimeout(function () {
+      var hadFocus = document.activeElement === b;
+      b.hidden = true;
+      if (hadFocus && $(resetBtnId)) $(resetBtnId).focus();
+    }, 10000);
+  }
+
   var els = {};
   ["heroVal", "heroSub", "hSlider", "hSliderVal", "hExact", "hWeek", "hTicks",
    "mOtPay", "mVar", "mEq", "mCash", "sMatch", "sProfit", "sStipend", "sStd", "sOt", "sBenefit",
@@ -477,7 +243,7 @@
        directly above the number it describes. */
     var withOT = !!state.a.matchOT;
     txt("aMatchUnit", withOT ? "% of 基本 + 加班费" : "% of 基本工资");
-    txt("matchBaseNote", withOT ? "跟随原表" : "与原表不同");
+    txt("matchBaseNote", withOT ? "原表口径" : "与原表口径不同");
     var note = $("matchBaseNote");
     if (note) note.classList.toggle("off-book", !withOT);
 
@@ -530,12 +296,15 @@
     els.hTicks.style.marginRight = Math.max(0, Math.round(r.right - s.right)) + "px";
   }
 
-  function renderNumbers(c) {
+  function renderNumbers(c, tx) {
     var d = displayOf(c, state.a);
     txt("heroVal", money(d.total));
+    /* The take-home figure is the one most people came for, and on a first visit
+       its own section starts below the fold — so the hero carries it too. */
     txt("heroSub", isFinite(d.total)
       ? "在 " + hrs(d.h) + " 加班下，总现金薪酬 " + money(d.cash) + " + 雇主福利 " + money(d.benefits) + "。"
       : "请先填写有效的基本工资与标准年工时。");
+    txt("heroTake", isFinite(d.total) && isFinite(tx.home) ? "税后到手约 " + money(tx.home) + "（估算，见下方「税后」）" : "");
 
     txt("mOtPay", money(d.otPay));
     txt("mVar", money(d.variable));
@@ -558,26 +327,45 @@
      means two different numbers depending on PTO and the difference is the whole
      point of having entered it. */
   function renderDialNote() {
-    var w = workWeeks(state.a), pto = Math.max(0, state.a.ptoHours || 0);
+    var a = state.a, w = workWeeks(a), pto = Math.max(0, a.ptoHours || 0);
+    /* Name the actual cause. With standard hours at 0 there are no weeks either,
+       and blaming PTO for that sends the reader to the wrong field. */
     txt("dialNote", isFinite(w)
       ? "按 " + (Math.round(w * 10) / 10) + " 个工作周折算（一年 52 周，减去 " + nf(0).format(pto) +
-        " 小时 PTO）。滑杆与两个输入框始终同步；下方「显示步长」只决定明细表的行距。"
-      : "PTO 超过了标准年工时，没有可用的工作周，折合每周无法计算。");
+        " 小时 PTO）。滑杆与两个输入框始终同步；下方「显示步长」只决定明细表每行的间隔。"
+      : !(a.stdHours > 0)
+        ? "标准年工时为 0，没有可用的工作周，折合每周无法计算。"
+        : "PTO 几乎占满了标准年工时，没有可用的工作周，折合每周无法计算。");
   }
 
+  var lastWarn = "";
   function renderWarnings() {
     var a = state.a, msgs = [];
-    if (!(a.base > 0)) msgs.push("基本工资必须大于 0，否则时薪与等效年终奖都无法计算。");
-    if (!(a.stdHours > 0)) msgs.push("标准年工时必须大于 0。");
-    if (a.maxH > 0 && a.step > 0 && a.maxH / a.step > 400) msgs.push("明细表上限相对步长过大，表格已截断到 400 行。");
+    var bad = { aBase: !(a.base > 0), aHours: !(a.stdHours > 0),
+                aPto: a.stdHours > 0 && !isFinite(workWeeks(a)) };
+    if (bad.aBase) msgs.push("基本工资必须大于 0，否则时薪与等效年终奖都无法计算。");
+    if (bad.aHours) msgs.push("标准年工时必须大于 0。");
+    if (M.scheduleRowCount(a) > M.MAX_ROWS) msgs.push("明细表上限相对步长过大，表格已截断到 " + M.MAX_ROWS + " 行。");
     if (state.h > a.maxH) msgs.push("当前加班小时超出了明细表上限，曲线与表格只画到上限为止。");
-    if (a.stdHours > 0 && (a.ptoHours || 0) >= a.stdHours)
-      msgs.push("PTO 不能达到或超过标准年工时，否则没有工作周可言，「折合每工作周」和「实际时薪」都算不出来。");
-    var box = els.warnBox;
+    if (bad.aPto)
+      msgs.push("PTO 几乎占满了标准年工时，没有工作周可言，「折合每工作周」和「实际时薪」都算不出来。");
+
+    /* The message box sits near the top of the page and the field that caused it
+       can be a dozen screens further down on a phone, so the FIELD is marked too —
+       visibly (the kit's .invalid) and for AT (aria-invalid). */
+    for (var id in bad) {
+      if (!bad.hasOwnProperty(id) || !els[id]) continue;
+      els[id].classList.toggle("invalid", bad[id]);
+      if (bad[id]) els[id].setAttribute("aria-invalid", "true"); else els[id].removeAttribute("aria-invalid");
+    }
+
+    var box = els.warnBox, text = msgs.join(" ");
+    if (text !== lastWarn && text) announce(text);
+    lastWarn = text;
     if (!box) return;
     if (!msgs.length) { box.hidden = true; box.textContent = ""; return; }
     box.hidden = false;
-    box.textContent = msgs.join(" ");
+    box.textContent = text;
   }
 
   /* Narrow-screen card labels are copied from the LIVE header cells, so they
@@ -604,9 +392,19 @@
     return '<button type="button" class="hjump" data-h="' + h + '">' + nf(0).format(h) + "</button>";
   }
 
-  function renderSchedule(rows) {
+  /* Neither table depends on the selected hours — only on the assumptions, the
+     precision and (for the reverse table) the target — so a slider drag rebuilds
+     neither; markCurrent moves the highlight. At the 400-row cap a rebuild per
+     input event is what made a drag miss its frames. */
+  var schedKey = null, revKey = null;
+
+  function renderSchedule() {
     var t = els.schedTable;
     if (!t) return;
+    var key = JSON.stringify(state.a) + "|" + state.prec;
+    if (key === schedKey) return;
+    schedKey = key;
+    var rows = schedule(state.a);
     var body = t.tBodies[0], html = "";
     for (var i = 0; i < rows.length; i++) {
       var r = displayOf(rows[i], state.a);
@@ -629,12 +427,15 @@
   function renderReverse() {
     var t = els.revTable;
     if (!t) return;
+    var key = JSON.stringify(state.a) + "|" + state.prec + "|" + state.target;
+    if (key === revKey) return;
+    revKey = key;
     var body = t.tBodies[0], html = "", i;
     for (i = 10; i <= 50; i += 5) {
       var need = hoursForTarget(state.a, i / 100);
       var c = compute(state.a, isFinite(need) ? need : 0);
       var d = displayOf(c, state.a);
-      html += '<tr data-h="' + (isFinite(need) ? need : 0) + '">' +
+      html += "<tr" + (isFinite(need) ? ' data-h="' + need + '"' : "") + ">" +
         "<td>" + i + "%</td>" +
         "<td>" + (isFinite(need) ? jumpCell(need) : "—") + "</td>" +
         "<td>" + perWeek(need) + "</td>" +
@@ -656,21 +457,36 @@
      keyboard user pressing Enter on a row jump would land back on <body> with the
      page scrolled somewhere else — the control they were using stops existing as
      a direct result of using it. Remember which one it was and give it back. */
+  /* Remembered by ROW, not by hour value: in the reverse table several targets
+     can need the same number of hours (every target the bonus alone already
+     covers needs 0 h), and looking the button up by its hours hands focus to the
+     first of them rather than the one that was pressed. */
   var pendingFocus = null;
   function rememberJumpFocus(btn) {
-    pendingFocus = btn && btn.closest("table") ?
-      { table: btn.closest("table").id, h: btn.getAttribute("data-h") } : null;
+    var tr = btn && btn.closest("tr"), table = btn && btn.closest("table");
+    pendingFocus = tr && table ? { table: table.id, row: tr.sectionRowIndex } : null;
   }
+  /* Only ever GIVES BACK focus that the rebuild took away — i.e. when it is on
+     <body>. A restore left armed by a jump that turned out to be a no-op used to
+     fire on the next unrelated render and yank focus out of whatever field the
+     user had moved on to. */
   function restoreJumpFocus() {
     if (!pendingFocus) return;
-    var t = document.getElementById(pendingFocus.table);
-    var b = t && t.querySelector('.hjump[data-h="' + pendingFocus.h + '"]');
+    var p = pendingFocus;
     pendingFocus = null;
+    var a = document.activeElement;
+    if (a && a !== document.body) return;
+    var t = document.getElementById(p.table);
+    var tr = t && t.tBodies[0] && t.tBodies[0].rows[p.row];
+    var b = tr && tr.querySelector(".hjump");
     if (b) b.focus();
   }
 
+  /* Only rows that STAND FOR an hour count. The waterfall and the bracket tables
+     have no data-h, and Number(null) is 0 — so at 0 overtime hours every one of
+     their rows used to light up as "current". */
   function markCurrent() {
-    [].forEach.call(document.querySelectorAll(".table tbody tr"), function (tr) {
+    [].forEach.call(document.querySelectorAll(".table tbody tr[data-h]"), function (tr) {
       tr.classList.toggle("is-current", Number(tr.getAttribute("data-h")) === state.h);
     });
   }
@@ -846,6 +662,7 @@
     addMedRate: "addMedRate", addMedThr: "addMedThr",
     otCap: "otCap", otPhase: "otPhase",
     c401kLimit: "c401kLimit", hsaLimit: "hsaLimit", iraLimit: "iraLimit",
+    iraPhaseLo: "iraPhaseLo", iraPhaseHi: "iraPhaseHi",
     taxYear: "year"
   };
 
@@ -867,7 +684,11 @@
     t.tBodies[0].innerHTML = html;
   }
 
-  function renderTaxInputs() {
+  /* The fields, switches and labels — everything EXCEPT the bracket rows. Kept
+     apart because the blur handlers call this: rebuilding the bracket <tbody>
+     on blur replaced the very input focus was moving into, so Tab from 联邦标准
+     扣除 landed on <body> and the next Tab went back to the top of the page. */
+  function renderTaxFields() {
     for (var id in TAX_FIELDS) {
       if (!TAX_FIELDS.hasOwnProperty(id)) continue;
       var el = $(id);
@@ -875,8 +696,11 @@
     }
     var cb = $("cHsaPayroll");
     if (cb) cb.checked = !!state.t.hsaPayroll;
+    var cov = $("cIraCovered");
+    if (cov) cov.checked = !!state.t.iraCovered;
 
-    [["ficaToggle", "fica", "ficaNote"], ["otDedToggle", "otDed", "otDedNote"]].forEach(function (x) {
+    [["ficaToggle", "fica", "ficaNote"], ["otDedToggle", "otDed", "otDedNote"],
+     ["dcOtDedToggle", "dcOtDed", "dcOtDedNote"]].forEach(function (x) {
       var g = $(x[0]);
       if (g) {
         [].forEach.call(g.querySelectorAll("button"), function (b) {
@@ -892,46 +716,88 @@
     txt("c401kCap", "上限 " + nf(0).format(state.t.c401kLimit));
     txt("cHsaCap", "上限 " + nf(0).format(state.t.hsaLimit));
     txt("cIraCap", "上限 " + nf(0).format(state.t.iraLimit));
+    /* Named from the defaults this build ships, not hard-coded in the markup — a
+       2027 build would otherwise offer to "restore 2026" and do something else. */
+    txt("taxResetBtn", "恢复 " + TAX_DEFAULTS.year + " 默认税表");
+    txt("dcSubNote", "taxable = AGI − DC 标准扣除" + (state.t.dcOtDed ? " − 加班扣除" : ""));
+  }
 
+  function renderTaxInputs() {
+    renderTaxFields();
     renderBrackets("fedBrackets", "fedBrackets");
     renderBrackets("dcBrackets", "dcBrackets");
   }
 
-  function renderTax(c) {
-    var t = state.t, x = computeTax(c, state.a, t);
-    var d = displayOf(c, state.a);
+  /* bracketTax never guesses at a mistyped table — it skips what it cannot read —
+     so say what it skipped, next to the table. */
+  var lastBrWarn = {};
+  function renderBracketHints() {
+    [["fedBrackets", "fedBrHint"], ["dcBrackets", "dcBrHint"]].forEach(function (x) {
+      var el = $(x[1]);
+      if (!el) return;
+      var issues = M.bracketIssues(state.t[x[0]]);
+      var msgs = issues.map(function (p) {
+        return p.kind === "open-not-last"
+          ? "第 " + (p.i + 1) + " 档上限留空表示「以上全部」，它后面的档都不会参与计算——只有最后一档可以留空。"
+          : "第 " + (p.i + 1) + " 档上限不高于上一档，这一档没有参与计算。";
+      });
+      el.hidden = !msgs.length;
+      el.textContent = msgs.join(" ");
+      /* Same treatment as every other warning: marked on the offending ceiling
+         and spoken once when it changes. */
+      var bad = issues.map(function (p) { return p.i; });
+      [].forEach.call(document.querySelectorAll("#" + x[0] + ' input[data-f="top"]'), function (inp) {
+        var on = bad.indexOf(Number(inp.getAttribute("data-i"))) !== -1;
+        inp.classList.toggle("invalid", on);
+        if (on) { inp.setAttribute("aria-invalid", "true"); inp.setAttribute("aria-describedby", x[1]); }
+        else { inp.removeAttribute("aria-invalid"); inp.removeAttribute("aria-describedby"); }
+      });
+      var text = el.textContent;
+      if (text && text !== lastBrWarn[x[0]]) announce(text);
+      lastBrWarn[x[0]] = text;
+    });
+  }
 
-    /* Quantized the same way the rest of the page is, and the waterfall's last
-       line is the SUM of the lines above it rather than a separately rounded
-       figure — same rule, same reason (see displayOf). */
+  /* The tax result in display space: quantized the same way the rest of the page
+     is, with take-home the SUM of the lines above it rather than a separately
+     rounded figure — same rule, same reason (see displayOf). */
+  function taxDisplay(c) {
+    var x = computeTax(c, state.a, state.t);
     var wages = q(x.wages), k401 = q(x.k401), hsa = q(x.hsa), ira = q(x.ira);
     var fed = q(x.fedTax), dc = q(x.dcTax), fica = q(x.fica);
     var taxSum = fed + dc + fica;
-    var home = wages - k401 - hsa - ira - taxSum;
+    return { x: x, wages: wages, k401: k401, hsa: hsa, ira: ira, fed: fed, dc: dc, fica: fica,
+             taxSum: taxSum, home: wages - k401 - hsa - ira - taxSum };
+  }
+
+  var lastContribWarn = "";
+  function renderTax(c, tx) {
+    var t = state.t, x = tx.x;
+    var wages = tx.wages, home = tx.home, taxSum = tx.taxSum;
 
     txt("tHome", money(home));
     txt("tTax", money(taxSum));
     txt("tEff", wages > 0 ? pct(taxSum / wages) : "—");
-    var marg = marginalRate(c, state.a, t);
-    txt("tMarg", pct(marg));
+    txt("tMarg", pct(marginalRate(c, state.a, t)));
 
     /* The after-tax counterparts of the pre-tax strip, with PTO inside the
        divisor because these are hours actually WORKED, not hours paid.
-       每加班小时净得 uses the MARGINAL rate, not the effective one: an extra
-       overtime hour is taxed at the top of the stack, not at the average. */
+       每加班小时净得 is measured, not derived from the marginal rate: an overtime
+       dollar partly escapes federal (and DC) tax through the overtime deduction,
+       so it is not taxed like the ordinary dollar 边际税率 describes. */
     txt("tEffHourly", rate(home / c.workedHours));
-    txt("tOtNet", rate(c.otHourly * (1 - marg)));
+    txt("tOtNet", rate(otNetPerHour(state.a, t, state.h)));
     var wk = workWeeks(state.a);
     txt("tPerWeek", isFinite(wk) ? money(home / wk) : "—");
 
     var rows = [
       ["总现金薪酬", wages, "+"],
-      ["401(k) 员工供款", -k401, "-"],
-      ["HSA 供款", -hsa, "-"],
-      ["传统 IRA 供款", -ira, "-"],
-      ["联邦所得税", -fed, "-"],
-      ["DC 所得税", -dc, "-"],
-      ["FICA（社保 + 医保）", -fica, "-"],
+      ["401(k) 员工供款", -tx.k401, "-"],
+      ["HSA 供款", -tx.hsa, "-"],
+      ["传统 IRA 供款", -tx.ira, "-"],
+      ["联邦所得税", -tx.fed, "-"],
+      ["DC 所得税", -tx.dc, "-"],
+      ["FICA（社保 + 医保）", -tx.fica, "-"],
       ["到手现金", home, "="]
     ];
     var body = $("waterfall") && $("waterfall").tBodies[0];
@@ -949,47 +815,93 @@
       labelCells($("waterfall"));
     }
 
-    /* Say what the overtime deduction actually did. "计入" on its own does not
-       tell you it was phased out to zero. */
+    /* Say what the overtime deduction actually did, step by step, and who it is
+       for. "计入" on its own tells you neither that it was phased out to zero nor
+       that an FLSA-exempt employee never had it. */
     var hint = $("otDedHint");
     if (hint) {
+      var flsa = "只有 FLSA 要求支付的加班才算：豁免（exempt）员工即使公司按 1.5 倍付了加班费，也不能扣。";
       if (!t.otDed) {
         hint.textContent = "不计入加班扣除，加班费按普通工资全额计税。";
+      } else if (!isFinite(x.otPremium)) {
+        hint.textContent = "请先填写有效的基本工资与标准年工时。";
+      } else if (!x.otYearOk) {
+        hint.textContent = "OBBBA 加班扣除只适用于 2025–2028 税年，" + Math.round(t.year) + " 年不计。";
       } else if (!(x.otPremium > 0)) {
-        hint.textContent = "当前没有加班，没有可扣除的溢价。";
+        hint.textContent = "当前没有可扣除的加班溢价（没有加班，或倍率不高于 1 倍）。" + flsa;
       } else {
-        hint.textContent = "加班溢价 " + money(x.otPremium) + "（时薪一倍以上的部分），" +
-          "本年上限退坡后为 " + money(x.otCap) + "，实际扣除 " + money(x.otDeduction) +
-          "，只作用于联邦所得税。";
+        hint.textContent = "可扣除的加班溢价 " + money(x.otPremium) + "（时薪一倍以上、至多 1.5 倍的那部分）" +
+          (x.otAllowed < x.otPremium ? "，按上限 " + money(t.otCap) + " 计" : "") +
+          (x.otReduction > 0 ? "；MAGI 超过 " + money(t.otPhase) + "，退坡扣减 " + money(x.otReduction) : "") +
+          "，实际扣除 " + money(x.otDeduction) + "，" +
+          (t.dcOtDed ? "联邦和 DC 都扣。" : "只作用于联邦所得税。") + flsa;
       }
     }
 
     var ih = $("iraHint");
     if (ih) {
-      var risky = x.ira > 0 && x.agi > 100000;
-      ih.hidden = !risky;
-      if (risky) {
-        ih.textContent = "注意：AGI 约 " + money(x.agi) +
-          "，如果你参加了公司的 401(k) 计划，这笔传统 IRA 供款很可能不可抵扣——" +
-          "上面的税额按可抵扣算，请自行核对当年的退坡区间。";
+      var phased = x.ira > 0 && t.iraCovered && x.iraMagi > t.iraPhaseLo;
+      ih.hidden = !phased;
+      if (phased) {
+        var full = x.iraDeduction >= x.ira;
+        ih.textContent = "有公司退休计划时，传统 IRA 的抵扣按 MAGI（不扣 IRA 本身）在 " +
+          money(t.iraPhaseLo) + "–" + money(t.iraPhaseHi) + " 之间退坡。你的 MAGI 约 " + money(x.iraMagi) + "，" +
+          (full ? "可抵扣额度降到 " + money(x.iraCap) + "，这笔供款仍然全部可抵扣。"
+                : (x.iraDeduction > 0 ? "只能抵扣 " + money(x.iraDeduction) + "，其余不可抵扣" : "这笔供款不可抵扣") +
+                  "；税额已按此计算，不可抵扣的部分照样从到手里扣掉。");
       }
     }
+
+    /* Over a limit is not necessarily wrong — catch-up contributions are legal —
+       so the figure is used as typed and the page says what it would take. Over
+       the wages, though, is never a real payslip. */
+    var cw = [], yr = Math.round(t.year);
+    if (x.k401 > t.c401kLimit) cw.push("401(k) 供款超过 " + yr + " 年上限 " + money(t.c401kLimit) +
+      "：超出部分只有 50 岁以上的追加供款（catch-up）才成立，页面按你填的数计算。");
+    if (x.hsa > t.hsaLimit) cw.push("HSA 供款超过上限 " + money(t.hsaLimit) + "：只有家庭计划或 55 岁以上的追加供款才可能更高，页面按你填的数计算。");
+    if (x.ira > t.iraLimit) cw.push("IRA 供款超过上限 " + money(t.iraLimit) + "：可抵扣的部分以上限为准；50 岁以上有追加额度，请把「IRA 上限」改成对应数字。");
+    if (x.k401 + x.hsa + x.ira > x.wages)
+      cw.push("供款合计 " + money(tx.k401 + tx.hsa + tx.ira) + " 超过了总现金薪酬 " + money(wages) + "，到手成了负数——请检查供款或工资。");
+    var ch = $("contribHint");
+    if (ch) {
+      ch.hidden = !cw.length;
+      ch.textContent = cw.join(" ");
+    }
+    var cwText = cw.join(" ");
+    if (cwText && cwText !== lastContribWarn) announce(cwText);
+    lastContribWarn = cwText;
+  }
+
+  /* The compact title echo in the top bar carries live figures instead of
+     repeating the page title: the assumptions sit far below the results, and
+     this keeps an answer on screen while you edit them. */
+  function renderTopbarLive(c, tx) {
+    var el = $("topbarTitle");
+    if (!el) return;
+    /* Whole dollars regardless of 精确: it is a glance readout in 13px of bar, and
+       with cents the take-home alone no longer fits a phone. */
+    var d = displayOf(c, state.a);
+    function whole(v) { return isFinite(v) ? (v < 0 ? "-$" : "$") + nf(0).format(Math.abs(Math.round(v))) : "—"; }
+    el.innerHTML = '<span class="tl-total"><span class="tl-lab">总薪酬包 </span>' + esc(whole(d.total)) +
+      '<span class="tl-sep"> · </span></span><span class="tl-take"><span class="tl-lab2">到手 </span>' +
+      esc(whole(tx.home)) + "</span>";
   }
 
   /* ---------- the one render entry point ---------- */
 
   function render() {
-    var c = compute(state.a, state.h);
+    var c = compute(state.a, state.h), tx = taxDisplay(c);
     renderDial();
-    renderNumbers(c);
+    renderNumbers(c, tx);
     renderWarnings();
     renderMix();
-    renderSchedule(schedule(state.a));
+    renderSchedule();
     renderReverse();
-    renderTax(c);
-    /* After BOTH tbodies have been rebuilt, not inside either one: markCurrent
-       marks every .table, and running it from renderSchedule meant the reverse
-       table's rows were replaced a moment later and never got the highlight. */
+    renderTax(c, tx);
+    renderBracketHints();
+    renderTopbarLive(c, tx);
+    /* After every tbody has been (re)built, not inside any one of them:
+       markCurrent marks rows across tables. */
     markCurrent();
     restoreJumpFocus();
     save();
@@ -1000,7 +912,7 @@
   var NATIVE = !!(window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.app);
 
   function tableText(sep) {
-    var a = state.a, rows = schedule(a), r = rates(a), out = [];
+    var a = state.a, t = state.t, rows = schedule(a), r = rates(a), out = [];
     /* A field holding the separator, a quote or a newline has to be quoted, or the
        importer silently splits one cell into two. Cheap here, invisible when missing. */
     function cell(v) {
@@ -1008,6 +920,11 @@
       return /["\n\r]/.test(s) || s.indexOf(sep) !== -1 ? '"' + s.replace(/"/g, '""') + '"' : s;
     }
     function line(arr) { out.push(arr.map(cell).join(sep)); }
+    /* Every column labelled "%" carries percentage points (5 = 5%), never a
+       fraction under a % label — pasted into a sheet, 0.05 under "(%)" reads as a
+       twentieth of a percent. */
+    function pp(v) { return r6(v * 100); }
+    var cNow = compute(a, state.h), xx = computeTax(cNow, a, t);
     line(["加班与总薪酬测算"]);
     line([]);
     line(["假设"]);
@@ -1015,55 +932,64 @@
     line(["标准年工时 (h)", a.stdHours]);
     line(["加班倍率 (x)", a.otMult]);
     line(["年终奖 ($/yr)", a.bonus]);
-    line(["401(k) 雇主匹配 (%)", a.matchPct]);
+    line(["401(k) 雇主匹配 (%)", pp(a.matchPct)]);
     line(["401(k) 匹配计算基数", a.matchOT ? "基本工资 + 加班费（原表口径）" : "仅基本工资"]);
-    line(["利润分享 (% of base)", a.profitPct]);
+    line(["利润分享 (% of base)", pp(a.profitPct)]);
     line(["通讯补贴 ($/yr)", a.stipend]);
     line(["PTO (h/yr)", a.ptoHours]);
-    line(["标准时薪 ($/h)", r.stdHourly]);
-    line(["加班时薪 ($/h)", r.otHourly]);
+    line(["标准时薪 ($/h)", r6(r.stdHourly)]);
+    line(["加班时薪 ($/h)", r6(r.otHourly)]);
     line(["工作周数（扣除 PTO）", r2(workWeeks(a))]);
-    var cNow = compute(a, state.h);
     line(["实际工作小时（含加班）", r2(cNow.workedHours)]);
     line(["实际时薪 ($/h)", r2(cNow.effHourly)]);
     line([]);
-    line(["加班 (h)", "加班费", "变动薪酬", "等效年终奖", "总现金薪酬", "401(k) 匹配", "利润分享", "通讯补贴", "总薪酬包"]);
+    line(["加班 (h)", "加班费", "变动薪酬", "等效年终奖 (%)", "总现金薪酬", "401(k) 匹配", "利润分享", "通讯补贴", "总薪酬包"]);
     rows.forEach(function (x) {
-      line([x.h, r2(x.otPay), r2(x.variable), r6(x.eqBonus), r2(x.cash), r2(x.match), r2(x.profit), r2(x.stipend), r2(x.total)]);
+      line([x.h, r2(x.otPay), r2(x.variable), r6(x.eqBonus * 100), r2(x.cash), r2(x.match), r2(x.profit), r2(x.stipend), r2(x.total)]);
     });
     line([]);
-    var t = state.t, cNow2 = compute(a, state.h), xx = computeTax(cNow2, a, t);
-    line(["税后（" + t.year + " 税表，单身，标准扣除）"]);
+    line(["税后（" + Math.round(t.year) + " 税表，单身，标准扣除）"]);
     line(["加班小时", state.h]);
     line(["总现金薪酬", r2(xx.wages)]);
     line(["401(k) 员工供款", r2(xx.k401)]);
     line(["HSA 供款" + (t.hsaPayroll ? "（工资扣除）" : "（非工资扣除）"), r2(xx.hsa)]);
     line(["传统 IRA 供款", r2(xx.ira)]);
+    line(["其中可抵扣的 IRA", r2(xx.iraDeduction)]);
     line(["AGI", r2(xx.agi)]);
     line(["OBBBA 加班扣除" + (t.otDed ? "" : "（未计入）"), r2(xx.otDeduction)]);
     line(["联邦应税所得", r2(xx.fedTaxable)]);
     line(["联邦所得税", r2(xx.fedTax)]);
-    line(["DC 应税所得", r2(xx.dcTaxable)]);
+    line(["DC 应税所得" + (t.dcOtDed ? "（扣加班扣除）" : "（不扣加班扣除）"), r2(xx.dcTaxable)]);
     line(["DC 所得税", r2(xx.dcTax)]);
     line(["FICA" + (t.fica ? "" : "（未计入）"), r2(xx.fica)]);
     line(["到手现金", r2(xx.takeHome)]);
-    line(["税后实际时薪 ($/h)", r2(xx.takeHome / cNow2.workedHours)]);
-    line(["每加班小时税后净得 ($/h)", r2(cNow2.otHourly * (1 - marginalRate(cNow2, a, t)))]);
+    line(["税后实际时薪 ($/h)", r2(xx.takeHome / cNow.workedHours)]);
+    line(["每加班小时税后净得 ($/h)", r2(otNetPerHour(a, t, state.h))]);
     line(["税后每工作周 ($)", r2(xx.takeHome / workWeeks(a))]);
     line([]);
     line(["反查：目标等效年终奖 → 需要加班小时"]);
-    line(["目标 %", "需要加班 (h)"]);
-    for (var p = 10; p <= 50; p += 5) line([p / 100, hoursForTarget(a, p / 100)]);
+    line(["目标 (%)", "需要加班 (h)"]);
+    for (var p = 10; p <= 50; p += 5) line([p, r6(hoursForTarget(a, p / 100))]);
+    /* The target the user actually typed, which is usually not on the 5% grid. */
+    if ([10, 15, 20, 25, 30, 35, 40, 45, 50].indexOf(state.target) === -1)
+      line([r6(state.target), r6(hoursForTarget(a, state.target / 100))]);
     return out.join("\n");
   }
   function r2(v) { return isFinite(v) ? Math.round(v * 100) / 100 : ""; }
   function r6(v) { return isFinite(v) ? Math.round(v * 1e6) / 1e6 : ""; }
 
+  /* A date, not the salary: a file name is visible wherever the file is — a
+     Downloads list, an attachment chip, a shared folder — without being opened. */
+  function exportName() {
+    var d = new Date(), z = function (n) { return (n < 10 ? "0" : "") + n; };
+    return "OT_Compensation_" + d.getFullYear() + "-" + z(d.getMonth() + 1) + "-" + z(d.getDate()) + ".csv";
+  }
+
   function exportCSV() {
     /* The BOM is what makes Excel open a UTF-8 CSV with Chinese headers without
        mangling them. Both paths get it, so the file is identical either way. */
-    var text = "﻿" + tableText(",");
-    var name = "OT_Compensation_" + nf(0).format(state.a.base).replace(/,/g, "") + ".csv";
+    var text = "\ufeff" + tableText(",");
+    var name = exportName();
     if (NATIVE) {
       window.webkit.messageHandlers.app.postMessage({ type: "saveFile", name: name, data: text });
       return;
@@ -1075,16 +1001,16 @@
       a.href = url; a.download = name;
       document.body.appendChild(a); a.click(); a.remove();
       setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
-      UIKit.toast("已导出 " + name);
+      toast("已导出 " + name);
     } catch (e) {
-      UIKit.toast("导出失败：" + e.message, true);
+      toast("导出失败：" + e.message, true);
     }
   }
 
   function copyTable() {
     var text = tableText("\t");
-    var done = function () { UIKit.toast("表格已复制，可直接粘进 Excel。"); };
-    var fail = function () { UIKit.toast("复制失败，请改用导出 CSV。", true); };
+    var done = function () { toast("表格已复制，可直接粘进 Excel。"); };
+    var fail = function () { toast("复制失败，请改用导出 CSV。", true); };
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(text).then(done, fail);
       return;
@@ -1129,6 +1055,9 @@
     var root = document.documentElement.cloneNode(true);
     [].forEach.call(root.querySelectorAll("script,link[rel=stylesheet],.ui-select-menu,.toast"),
       function (n) { n.parentNode.removeChild(n); });
+    /* The large title fades while it is echoed in the bar — scroll state, and
+       printing always starts scrolled, so it would print at 30% grey. */
+    [].forEach.call(root.querySelectorAll(".echoed"), function (n) { n.classList.remove("echoed"); });
     /* The disclosure is the exhibit's footnotes; on paper they are not optional. */
     [].forEach.call(root.querySelectorAll("details"), function (d) { d.setAttribute("open", "open"); });
 
@@ -1251,7 +1180,7 @@
        the host assembles exactly this string. */
     snapshot: snapshotHTML,
     reset: doReset,
-    toast: function (m, bad) { UIKit.toast(m, !!bad); }
+    toast: function (m, bad) { toast(m, !!bad); }
   };
 
   /* ---------- input handling ---------- */
@@ -1280,14 +1209,24 @@
     render();
   }
 
+  /* The defaults are example figures, not the workbook's: say so, and make the
+     reset undoable — it overwrites whatever real numbers were typed in. */
   function doReset() {
+    var before = { a: clone(state.a), h: state.h, target: state.target };
     state.a = clone(DEFAULTS);
     state.h = 250;
     state.target = 25;
     if (els.revPct) els.revPct.value = "25";
     renderAssumptions();
     render();
-    UIKit.toast("已恢复原表的默认假设。");
+    toast("已恢复默认示例值——10 秒内可以按旁边的「撤销」撤回。");
+    offerUndo("resetUndo", "resetBtn", function () {
+      state.a = before.a; state.h = before.h; state.target = before.target;
+      if (els.revPct) els.revPct.value = String(state.target);
+      renderAssumptions();
+      render();
+      toast("已撤销恢复。");
+    });
   }
 
   /* ---------- wiring ---------- */
@@ -1296,11 +1235,14 @@
   renderAssumptions();
   if (els.revPct) els.revPct.value = String(state.target);
 
-  UIKit.chrome({ titleSlot: "#topbarTitle" });
+  /* The kit echoes the page title into a HIDDEN slot; that is what drives
+     .title-shown. The visible compact slot (#topbarTitle) carries live figures
+     instead, written by renderTopbarLive — see there. */
+  UIKit.chrome({ titleSlot: "#topbarEcho" });
 
-  /* UIKit.chrome() re-measures --topbar-h on window resize only. This bar also
-     changes height on its OWN: at narrow widths the compact title echo appears and
-     the toolbar wraps to a second line, and nothing fires a resize for that.
+  /* UIKit.chrome() re-measures --topbar-h on window resize only. This bar can
+     also change height on its OWN (the compact slot appearing, a font loading),
+     and nothing fires a resize for that.
      Measured in a real browser at 390px wide: the bar went 55 -> 95px while
      --topbar-h stayed at 55, and the sub-bar — pinned at calc(--topbar-h - 1px) —
      tucked 41px UNDER the top bar, hiding the quick-jump buttons entirely
@@ -1339,6 +1281,7 @@
   UIKit.segmented("#matchBaseToggle");
   UIKit.segmented("#ficaToggle");
   UIKit.segmented("#otDedToggle");
+  UIKit.segmented("#dcOtDedToggle");
   UIKit.watchSliders();
   UIKit.edgeFade("#subbarScroll");   // the quick-jump bar scrolls sideways on a phone
   UIKit.popover();
@@ -1377,6 +1320,9 @@
     markCurrent();
     save();
   });
+  /* A value the model refused (empty, negative) must not stay on screen next to
+     a result computed from something else. */
+  on(els.revPct, "blur", function () { this.value = String(state.target); });
 
   /* Segmented controls: UIKit.segmented drives the THUMB only — switching
      aria-pressed is the app's job (SKILL.md, "这些要你自己写"). */
@@ -1408,12 +1354,14 @@
         if (this.value === "") return;              // mid-typing
         var v = Number(this.value);
         if (!isFinite(v) || v < 0) return;
-        state.t[key] = v;
-        if (key === "year") txt("taxYearTag", String(Math.round(v)) + " 税率");
-        if (key === "c401kLimit" || key === "hsaLimit" || key === "iraLimit") renderTaxInputs();
+        /* A year is a label: stored whole, so the tag, the CSV header and the
+           2025-2028 overtime-deduction window all read the same year. */
+        state.t[key] = key === "year" ? Math.round(v) : v;
+        if (key === "year" || key === "c401kLimit" || key === "hsaLimit" || key === "iraLimit") renderTaxFields();
         render();
       });
-      on($(id), "blur", function () { renderTaxInputs(); });
+      /* Fields only — never the bracket rows (see renderTaxFields). */
+      on($(id), "blur", function () { renderTaxFields(); });
     }(tid, TAX_FIELDS[tid]));
   }
 
@@ -1421,13 +1369,17 @@
     state.t.hsaPayroll = this.checked ? 1 : 0;
     render();
   });
+  on($("cIraCovered"), "change", function () {
+    state.t.iraCovered = this.checked ? 1 : 0;
+    render();
+  });
 
-  [["ficaToggle", "fica"], ["otDedToggle", "otDed"]].forEach(function (x) {
+  [["ficaToggle", "fica"], ["otDedToggle", "otDed"], ["dcOtDedToggle", "dcOtDed"]].forEach(function (x) {
     on($(x[0]), "click", function (e) {
       var b = e.target.closest("button");
       if (!b) return;
       state.t[x[1]] = b.getAttribute("data-on") === "1" ? 1 : 0;
-      renderTaxInputs();
+      renderTaxFields();
       render();
     });
   });
@@ -1453,6 +1405,27 @@
     render();
   });
 
+  /* Leaving a bracket cell puts the model's value back into it. Without this a
+     cleared or negative rate stayed on screen while the tax went on using the
+     old one. */
+  on($("secTax"), "focusout", function (e) {
+    var el = e.target;
+    if (!el.getAttribute || !el.getAttribute("data-br")) return;
+    var row = state.t[el.getAttribute("data-br")][Number(el.getAttribute("data-i"))];
+    if (!row) return;
+    var v = el.getAttribute("data-f") === "top" ? row[0] : row[1];
+    el.value = v === null ? "" : String(v);
+  });
+
+  /* After the rows are rebuilt the control that was used is gone; hand focus to
+     the nearest thing that still means the same place. */
+  function focusBracket(key, i, sel) {
+    var t = $(key), rows = t && t.tBodies[0].rows;
+    if (!rows || !rows.length) return;
+    var el = rows[Math.max(0, Math.min(i, rows.length - 1))].querySelector(sel);
+    if (el) el.focus();
+  }
+
   on($("secTax"), "click", function (e) {
     var del = e.target.closest ? e.target.closest(".br-del") : null;
     if (del) {
@@ -1461,6 +1434,7 @@
         state.t[key].splice(i, 1);
         renderTaxInputs();
         render();
+        focusBracket(key, i, ".br-del");
       }
       return;
     }
@@ -1472,21 +1446,35 @@
       var lastRate = rows.length ? rows[rows.length - 1][1] : 0;
       /* Insert BEFORE an open-ended top band, so adding a bracket never silently
          deletes the "and everything above" row. */
+      var at;
       if (lastTop === null && rows.length) {
-        rows.splice(rows.length - 1, 0, [Math.max(0, rows.length > 1 ? Number(rows[rows.length - 2][0]) + 10000 : 10000), lastRate]);
+        at = rows.length - 1;
+        rows.splice(at, 0, [Math.max(0, rows.length > 1 ? Number(rows[rows.length - 2][0]) + 10000 : 10000), lastRate]);
       } else {
+        at = rows.length;
         rows.push([null, lastRate]);
       }
       renderTaxInputs();
       render();
+      focusBracket(k, at, 'input[data-f="top"]');
     }
   });
 
+  /* The TABLE goes back to this build's defaults; what you contribute and which
+     rules apply to you stay (TAX_PERSONAL) — resetting the rates is not a reason
+     to lose your 401(k) figure. Undoable either way. */
   on($("taxResetBtn"), "click", function () {
-    state.t = cloneTax(TAX_DEFAULTS);
+    var before = M.cloneTax(state.t);
+    state.t = M.resetTaxTable(state.t);
     renderTaxInputs();
     render();
-    UIKit.toast("税表已恢复到 " + TAX_DEFAULTS.year + " 年的默认值。");
+    toast("税表已恢复到 " + TAX_DEFAULTS.year + " 年的默认值，你的供款和开关没有动；10 秒内可以撤回。");
+    offerUndo("taxUndo", "taxResetBtn", function () {
+      state.t = before;
+      renderTaxInputs();
+      render();
+      toast("已撤销恢复。");
+    });
   });
 
   on($("matchBaseToggle"), "click", function (e) {
@@ -1508,7 +1496,11 @@
   document.addEventListener("click", function (e) {
     if (!e.target || !e.target.closest) return;
     var b = e.target.closest(".hjump");
-    if (b) { rememberJumpFocus(b); setHours(b.getAttribute("data-h")); return; }
+    if (b) {
+      if (Number(b.getAttribute("data-h")) !== state.h) rememberJumpFocus(b);
+      setHours(b.getAttribute("data-h"));
+      return;
+    }
     var tr = e.target.closest(".table tbody tr[data-h]");
     if (tr) setHours(tr.getAttribute("data-h"));
   });
@@ -1537,22 +1529,76 @@
     panel.addEventListener("focusout", function (e) {
       if (!panel.contains(e.relatedTarget)) setMixHover(null);
     });
-    panel.addEventListener("keydown", function (e) {
-      if (e.key === "Escape" && mixPinned) { mixPinned = null; paintMixActive(); }
-    });
   }());
 
   /* Quick-jump bar. scrollIntoView honours html{scroll-padding-top}, which is
-     calc(--topbar-h + 48px) — so the target clears BOTH sticky bars. */
+     calc(--topbar-h + 48px) — so the target clears BOTH sticky bars. Focus moves
+     to the section's heading too, without scrolling: otherwise the page scrolled
+     but focus stayed in the bar, and the next Tab snapped back to the top. */
   [].forEach.call(document.querySelectorAll("[data-jump]"), function (b) {
     b.addEventListener("click", function () {
       var t = document.getElementById(b.getAttribute("data-jump"));
-      if (t) t.scrollIntoView({ behavior: UIKit.reduceMotion() ? "auto" : "smooth", block: "start" });
+      if (!t) return;
+      t.scrollIntoView({ behavior: UIKit.reduceMotion() ? "auto" : "smooth", block: "start" });
+      var h = t.querySelector("h2") || t;
+      h.setAttribute("tabindex", "-1");
+      try { h.focus({ preventScroll: true }); } catch (e) { /* old engines: leave focus where it was */ }
     });
   });
 
+  /* The info dot opens on hover and on focus. Escape closes it WITHOUT moving
+     focus (blurring it sent the next Tab back to the top of the page) and closes
+     a pointer-opened one too (WCAG 1.4.13); Enter/Space toggle it, as its
+     role=button promises. The class comes off again when the pointer leaves or
+     focus moves on. Escape also releases a pinned donut slice wherever focus is —
+     a slice pinned by mouse never had focus inside the chart. */
+  function popAnchors() { return [].slice.call(document.querySelectorAll(".pop-anchor")); }
+  document.addEventListener("keydown", function (e) {
+    var a = document.activeElement;
+    var onAnchor = a && a.classList && a.classList.contains("pop-anchor");
+    if (e.key === "Escape") {
+      popAnchors().forEach(function (p) {
+        if (p === a || p.matches(":hover")) p.classList.add("pop-dismissed");
+      });
+      if (mixPinned) { mixPinned = null; paintMixActive(); }
+    } else if (onAnchor && (e.key === "Enter" || e.key === " ")) {
+      e.preventDefault();
+      a.classList.toggle("pop-dismissed");
+    }
+  });
+  popAnchors().forEach(function (p) {
+    p.addEventListener("blur", function () { p.classList.remove("pop-dismissed"); });
+    p.addEventListener("mouseleave", function () { p.classList.remove("pop-dismissed"); });
+  });
+  /* The kit clamps a popover into the viewport only when it is revealed, but the
+     HIDDEN box still takes part in layout — so at 414-480px the lede's popover
+     stuck out past the right edge and the whole page scrolled sideways. Clamp
+     every one up front and again on resize. */
+  /* WebKit applies the new --hx margin but keeps the page's scrollable overflow
+     from BEFORE it (measured: box inside the viewport, scrollWidth still 478 at
+     430px) until the block CONTAINING the anchor is laid out again — re-laying
+     out the popover alone does not clear it. Same stale-layout shape as
+     forceRestyle's other cases, and the same cure, applied to that block. */
+  function clampPopovers() {
+    popAnchors().forEach(function (p) {
+      UIKit.positionPopover(p);
+      if (p.parentElement) p.parentElement.setAttribute("data-pop-host", "");
+    });
+    forceRestyle("[data-pop-host]");
+  }
+  clampPopovers();
+  window.addEventListener("resize", clampPopovers);
+
   render();
   pushTheme();
+  if (taxUpdatedFrom !== null) {
+    var NAMES = { c401k: "401(k)", hsa: "HSA" };
+    var moved = taxMoved.map(function (m) {
+      return NAMES[m[0]] + " 供款跟着上限从 " + nf(0).format(m[1]) + " 调到 " + nf(0).format(m[2]);
+    });
+    toast("税表已从 " + taxUpdatedFrom + " 年更新到 " + TAX_DEFAULTS.year + " 年的默认值" +
+      (moved.length ? "；" + moved.join("，") + "；其余供款和开关保持不变。" : "，你的供款和开关保持不变。"));
+  }
 
   /* UIKit.segmented places the thumb in a microtask, so this has to run after
      that has landed — hence the timer rather than an inline call. If it never

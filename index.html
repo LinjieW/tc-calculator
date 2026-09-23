@@ -10,6 +10,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>加班与总薪酬测算</title>
+<meta name="description" content="加班费、年终奖与雇主福利折算成总薪酬包，再估算税后到手（单身、DC、2026 税表）。预填的是示例数字，改成你自己的即可，数据只存在本机。">
 
 <!-- Theme BEFORE the stylesheets, inline and blocking. A deferred theme decision paints
      one full frame of the wrong theme on every launch. -->
@@ -83,8 +84,14 @@ document.documentElement.dataset.theme=t||((window.matchMedia&&matchMedia("(pref
 
   /* ---- ink: warm grays, never neutral #333/#666/#999 on a warm ground ---- */
   --label:#37342F;
-  --label-2:#767168;
-  --label-3:#ABA69C;
+  /* LOCAL RE-VALUATION (values only — see README). As shipped, --label-2 was
+     3.9:1 on the page ground and --label-3 2.1-2.3:1 on cards and wells, and this
+     app sets most of its small print (11-12.5px labels, notes, ticks) in them.
+     Both now clear WCAG AA 4.5:1 on every surface they sit on here: --label-2
+     5.7:1+ on the ground, --label-3 4.6:1+ on a well and 5.1:1 on a card. The
+     tertiary tier is still lighter than the secondary, by less. */
+  --label-2:#5C5850;
+  --label-3:#6F6B63;
   --ink-number:#2A2823;    /* near-ink, reserved for the celebrated number in a hero/metric */
 
   /* ---- lines ---- */
@@ -93,9 +100,12 @@ document.documentElement.dataset.theme=t||((window.matchMedia&&matchMedia("(pref
                                              thing: control tracks, tick marks, inactive dots */
 
   /* ---- state: muted, but never so muted that warn blurs into bad ---- */
-  --good:#6F8A5F;   /* sage — slightly deeper than its dark counterpart, for legibility on white */
-  --warn:#BD985C;   /* ochre */
-  --bad:#AF746A;    /* terracotta */
+  /* LOCAL RE-VALUATION, same hues one step deeper: white toast text on the
+     shipped sage/terracotta was 3.8:1, and ochre as TEXT (the 与原表口径不同 state,
+     warnings) was 2.6:1 on a card. Now 4.6:1+ and 5.4:1. */
+  --good:#647C56;   /* sage — slightly deeper than its dark counterpart, for legibility on white */
+  --warn:#806334;   /* ochre */
+  --bad:#9C675E;    /* terracotta */
 
   /* ---- accents: CATEGORICAL, for data dimensions / scenes. Not state. ----
      Kept off the red/orange axis on purpose so an accent can never be misread as
@@ -111,7 +121,7 @@ document.documentElement.dataset.theme=t||((window.matchMedia&&matchMedia("(pref
      muted coral and slate blue. Re-apply this block if the kit is ever updated. */
   --accent-1:#5C8A87;   /* dusty aqua */
   --accent-2:#C2765A;   /* muted coral — deliberately redder than --warn's ochre
-                           (#BD985C) so a data slice cannot be read as a warning */
+                           (light --warn) so a data slice cannot be read as a warning */
   --accent-3:#6C82A4;   /* slate blue */
 
   /* ---- radius ----
@@ -202,8 +212,9 @@ document.documentElement.dataset.theme=t||((window.matchMedia&&matchMedia("(pref
   --bg-base:#1D1B19; --bg-inset:#242220; --bg-elevated:#2B2925;
 
   --label:#EDE9E1; --label-2:#ACA79D;
-  --label-3:#8A857B;                       /* lifted off a literal remap: 11px metadata in the
-                                              tertiary color must stay readable on charcoal */
+  --label-3:#969187;                       /* lifted off a literal remap: 11px metadata in the
+                                              tertiary color must stay readable on charcoal.
+                                              LOCAL: was #8A857B, 3.96:1 on a card; now 4.6:1 */
   --ink-number:#F5F1E9;
 
   --separator:rgba(240,236,228,.15);
@@ -1496,6 +1507,27 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 .topbar-tools{display:flex;align-items:center;gap:var(--space-3);margin-left:auto}
 
 .lede{max-width:68ch;margin:14px 0 26px}
+/* --tint-strong, not --tint: --tint is 4.46:1 on the page ground, a hair under
+   AA for 12.5px text. */
+.lede-jump{color:var(--tint-strong);text-decoration:underline;text-decoration-color:color-mix(in srgb, var(--tint) 45%, transparent);
+  text-underline-offset:3px}
+
+/* ---- top bar live readout ----
+   The compact slot shows the two answers instead of re-printing the page title
+   (renderTopbarLive). The labels are quieter than the figures. */
+.topbar-title .tl-lab,.topbar-title .tl-lab2{color:var(--label-2);font-weight:500}
+.topbar-title .tl-sep{color:var(--label-3)}
+/* When space runs out the TOTAL gives way (ellipsis) and the take-home figure
+   stays whole — a truncated "到手 $69,3…" is worse than no figure. */
+.topbar.title-shown .topbar-title{display:flex;min-width:0}
+.topbar-title .tl-total{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.topbar-title .tl-take{flex:0 0 auto}
+
+/* Headings for structure, the kit's panel/sub-label typography for looks. The
+   kit's reset already zeroes their margins; tabindex=-1 is set only so the
+   quick-jump bar can move focus there, which is not a place to draw a ring. */
+h2.panel-title,h3.tax-sub{font-family:var(--font-text)}
+h2.panel-title[tabindex="-1"]:focus,section[tabindex="-1"]:focus{outline:none}
 
 /* ---- hero row ----
    One hero per screen: the celebrated figure takes the wide column across the
@@ -1505,6 +1537,8 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
   align-items:stretch;margin-bottom:var(--space-3);min-width:0}
 .hero-grid > .stat{display:flex;flex-direction:column;justify-content:center;padding:26px 24px}
 .hero-grid > .stat .big{margin-top:2px}
+.hero-grid > .stat .hero-take{margin-top:6px;color:var(--label);font-weight:600}
+.hero-grid > .stat .hero-take:empty{display:none}
 .hero-grid > .panel{margin-bottom:0;padding:20px 22px;min-width:0}
 
 .dial .panel-head{margin-bottom:2px}
@@ -1526,8 +1560,10 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 /* ---- third metric tier ----
    .metric-strip > * is the kit's cell; the VALUE inside it is mine to size, and
    it must land a full class below the band's 24px or the two tiers read as one.
-   (design.md §7: "由你的 markup 给，再小一档".) */
-.metric-strip > * {justify-content:space-between}
+   (design.md §7: "由你的 markup 给，再小一档".) The cell keeps the kit's own
+   label-then-value spacing: pushing the value to the far edge of its cell put it
+   closer to the NEXT cell's label than to its own, which pairs figures with the
+   wrong words. */
 .s-lab{font-family:var(--font-text);font-size:11px;font-weight:600;letter-spacing:.07em;
   text-transform:uppercase;color:var(--label-3);min-width:0}
 
@@ -1587,8 +1623,51 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 .mix-pct{font-family:var(--font-num);font-size:11.5px;color:var(--label-3);
   white-space:nowrap;min-width:46px;text-align:right}
 
-/* "与原表不同" is a state, so it gets the one colour a state may have. */
+/* "与原表口径不同" is a state, so it gets the one colour a state may have. */
 .off-book{color:var(--warn)!important}
+.tax-warn{color:var(--warn)}
+
+/* A label for a control that is not a form field (a segmented group, labelled
+   through aria-labelledby). A <label> there labels nothing; this is the kit's
+   .field > label look without the element. */
+.field > .field-label{display:flex;justify-content:space-between;align-items:baseline;gap:var(--space-2);
+  font-size:12px;color:var(--label-2);margin-bottom:4px}
+
+/* The selected segment already has the thumb; weight is the second, non-colour
+   cue the kit's comment promises. */
+.segmented button:not([aria-pressed="true"]){font-weight:500}
+
+/* The kit removes the range input's outline and gives it nothing back, so a
+   keyboard user had no idea the slider had focus. The ring goes on the knob. */
+.dial input[type=range]:focus-visible::-webkit-slider-thumb{
+  box-shadow:0 0 0 2px var(--bg-elevated),0 0 0 4px var(--tint),var(--shadow-1)}
+
+/* A disabled field has to look disabled: #hWeek goes dead when there are no
+   working weeks, and at full strength it read as a broken input. */
+.field input:disabled{opacity:.5;cursor:not-allowed}
+.field input::placeholder,.bracket-table input::placeholder{color:var(--label-3);opacity:1}
+
+/* The closed select. With the native appearance WebKit ignores the kit's
+   min-height and padding and draws a 23px popup button beside 38px fields;
+   select-menu.js already replaces the popup, so nothing is lost by dropping it.
+   The chevron is two gradients so its colour stays a token. */
+.field select{-webkit-appearance:none;appearance:none}
+/* Longhands, repeated under every selector the kit uses to reset the select's
+   `background` SHORTHAND (dark theme, focus) — each of those wiped the image,
+   and with the native arrow gone nothing then said "dropdown". */
+.field select,.field select:focus,
+:root[data-theme="dark"] .field select,:root[data-theme="dark"] .field select:focus{
+  background-image:linear-gradient(45deg,transparent 50%,var(--label-2) 50%),
+                   linear-gradient(135deg,var(--label-2) 50%,transparent 50%);
+  background-position:calc(100% - 16px) 50%,calc(100% - 11px) 50%;
+  background-size:5px 5px,5px 5px;background-repeat:no-repeat}
+
+/* Escape (or Enter/Space on the dot) closes the popover without moving focus.
+   Same specificity as the kit's :hover/:focus reveal, and later, so it wins. */
+.pop-anchor.pop-dismissed .popover{opacity:0;visibility:hidden}
+
+/* 撤销 appears next to its reset button for 10 s (offerUndo). */
+#resetUndo,#taxUndo{color:var(--tint-strong)}
 /* Before the first render this <svg> has no children: an empty box with height
    reads as a broken card. The moment anything is appended it reveals itself —
    no flag to keep in sync. */
@@ -1612,6 +1691,17 @@ svg.chart:empty{display:none}
    and its buttons must not shrink or wrap. */
 .subbar-inner.h-scroll{gap:var(--space-2)}
 .subbar-inner.h-scroll > .btn-ghost{flex:0 0 auto;white-space:nowrap}
+
+/* ---- the schedule on a phone ----
+   It stays a TABLE and scrolls sideways, with the hour column pinned, instead
+   of becoming 26 stacked cards: stacked, it was 7,240px of phone and pushed the
+   assumptions 14,000px down the page. The waterfall and the reverse table fit
+   at 360px and wider; at 320 in 精确 mode they scroll a few px inside their own
+   box. The pinned cell needs an opaque fill, including the current row's tint
+   mixed onto it. */
+.table.sched th:first-child,.table.sched td:first-child{position:sticky;left:0;z-index:1;background:var(--bg-elevated)}
+.table.sched tbody tr:hover td:first-child{background:var(--bg-inset)}
+.table.sched tbody tr.is-current td:first-child{background:color-mix(in srgb, var(--tint) 13%, var(--bg-elevated))}
 
 /* ---- tables ----
    The row that the whole page is currently reporting on. One tint wash, no
@@ -1699,6 +1789,25 @@ svg.chart:empty{display:none}
   .assume-grid .segmented button{flex:1;min-width:0;white-space:normal}
   .dial-fields{grid-template-columns:minmax(0,1fr)}
   .topbar-tools{gap:var(--space-2)}
+  /* One row, always. The live readout takes the brand's place instead of
+     wrapping the bar to two lines — a wrap made the whole page jump ~20px the
+     moment it appeared. */
+  .topbar-inner{flex-wrap:nowrap}
+  .topbar.title-shown .topbar-brand{display:none}
+  .topbar.title-shown .topbar-title{max-width:none;flex:1 1 auto;min-width:0;padding-left:0;font-size:13.5px}
+  .topbar-title .tl-lab{display:none}
+  /* The readout takes the squeeze, never the controls: a squeezed 整数/精确
+     wrapped to two lines and grew the bar by 10px. */
+  .topbar-tools{flex:0 0 auto}
+  .topbar-tools .segmented button{white-space:nowrap}
+}
+/* The smallest phones: the four-up tax band and the tables were a few px too
+   wide at 320 in 精确 mode. */
+@media (max-width:360px){
+  /* Room for one figure only: the take-home, whole, rather than both clipped. */
+  .topbar-title .tl-total{display:none}
+  .metric-band .metric .val{font-size:20px}
+  .table th,.table td{padding-left:6px;padding-right:6px}
 }
 
 /* ---- the no-JavaScript banner ----
@@ -1743,6 +1852,9 @@ svg.chart:empty{display:none}
   .segmented button{padding-top:10px;padding-bottom:10px}
   .table td .hjump{display:inline-block;padding:7px 2px}
   .subbar-inner .btn-ghost{padding-top:9px;padding-bottom:9px}
+  /* The rest of the 44pt pass: measured at 25px tall before. */
+  .head-tools .btn-ghost,[data-addrow],.subbar-inner .btn-ghost,.segmented button{min-height:44px}
+  #themeToggle{min-width:44px;min-height:44px}
 }
 
 /* ---- print ----
@@ -1769,22 +1881,11 @@ svg.chart:empty{display:none}
   /* A printed hour is not a link. */
   .table td .hjump{text-decoration:none;color:inherit}
 
-  /* UN-STACK. A4 minus margins lays out at roughly 700 CSS px, which is inside
-     the kit's 820px card-collapse breakpoint — so without this the 26-row
-     schedule prints as 26 stacked cards and the exhibit runs to a dozen pages of
-     something that is not a table. Every property the stack block sets has to be
-     put back, including the ::before labels it grows from data-label. */
-  .table.stack{display:table;width:100%;border-collapse:collapse;font-size:10.5px}
-  .table.stack tbody{display:table-row-group;width:auto}
-  .table.stack thead{display:table-header-group;position:static;width:auto;height:auto;
-    overflow:visible;clip-path:none}
-  .table.stack tr{display:table-row;grid-template-columns:none;gap:0;
-    margin:0;padding:0;border:0;border-radius:0;background:none}
-  .table.stack td{display:table-cell;padding:5px 7px;border:0;
-    border-bottom:1px solid var(--separator);text-align:right;gap:0}
-  .table.stack td:first-child{text-align:left}
-  .table.stack td:last-child{grid-column:auto}
-  .table.stack td::before{content:none;display:none}
+  /* Paper tables: denser type, and no pinned column (sticky means nothing on
+     a page). */
+  .table{font-size:10.5px}
+  .table td{padding:5px 7px}
+  .table.sched th:first-child,.table.sched td:first-child{position:static;background:none}
   .table-scroll{overflow:visible}
 
   /* Let a long schedule break across pages instead of being pushed whole onto
@@ -1816,7 +1917,12 @@ svg.chart:empty{display:none}
 <div class="topbar">
   <div class="topbar-inner">
     <div class="topbar-brand">薪酬测算</div>
-    <div class="topbar-title" id="topbarTitle" aria-hidden="true"></div>
+    <!-- The kit echoes the page title into the hidden span, which is what drives
+         .title-shown; the visible compact slot carries live figures instead
+         (renderTopbarLive), so an answer stays on screen while you edit the
+         assumptions a long way down the page. -->
+    <span id="topbarEcho" hidden></span>
+    <div class="topbar-title tnum" id="topbarTitle" aria-hidden="true"></div>
     <div class="topbar-tools">
       <div class="segmented" id="precToggle" role="group" aria-label="数值精度">
         <button type="button" data-prec="0" aria-pressed="true">整数</button>
@@ -1848,8 +1954,8 @@ svg.chart:empty{display:none}
 
   <h1 class="page-title">加班与总薪酬测算</h1>
   <p class="panel-note lede">
-    把加班费和固定年终奖一起，折算成「相当于多少比例的年终奖」<span class="pop-anchor" tabindex="0">i<span class="popover">（加班费 + 固定年终奖）÷ 基本工资。它把两笔钱当成一笔按基本工资计算的传统年终奖来看，方便和「涨 X% 年终奖」这类说法直接比较。</span></span>，并算出含雇主福利的总薪酬包。
-    所有假设都可以在下方修改，改完即时生效，并保存在本机。
+    把加班费和固定年终奖一起，折算成「相当于多少比例的年终奖」<span class="pop-anchor" tabindex="0" role="button" aria-label="等效年终奖的定义" aria-describedby="popEq">i<span class="popover" id="popEq" role="tooltip">（加班费 + 固定年终奖）÷ 基本工资。它把两笔钱当成一笔按基本工资计算的传统年终奖来看，方便和「涨 X% 年终奖」这类说法直接比较。</span></span>，算出含雇主福利的总薪酬包，再估算税后到手（单身、住 DC、2026 税表）。
+    预填的是<strong>示例数字</strong>——<a href="#secAssume" class="lede-jump">在「假设」里换成你自己的</a>，改完即时生效，只保存在本机。
   </p>
 
   <!-- ============ 一档 hero + 控制盘 ============ -->
@@ -1858,10 +1964,13 @@ svg.chart:empty{display:none}
       <div class="lab">总薪酬包 · TOTAL PACKAGE</div>
       <div class="big tnum" id="heroVal">—</div>
       <div class="sub" id="heroSub">—</div>
+      <!-- Its own line, not a clause of the one above: that sentence is an
+           identity (cash + benefits = the total) and its figures must add up. -->
+      <div class="sub hero-take" id="heroTake"></div>
     </div>
 
     <div class="panel dial">
-      <div class="panel-head"><div class="panel-title">加班小时</div></div>
+      <div class="panel-head"><h2 class="panel-title">加班小时</h2></div>
 
       <div class="slider-row">
         <span class="sl-lab">年加班小时</span>
@@ -1878,7 +1987,7 @@ svg.chart:empty{display:none}
         </div>
         <div class="field">
           <label for="hWeek"><span>折合每工作周</span><span class="val" id="hWeekUnit">h / 周</span></label>
-          <input id="hWeek" type="number" min="0" step="0.01" value="4.81" inputmode="decimal">
+          <input id="hWeek" type="number" min="0" step="0.01" value="4.81" inputmode="decimal" placeholder="—">
         </div>
       </div>
       <p class="panel-note dial-note" id="dialNote">—</p>
@@ -1887,7 +1996,7 @@ svg.chart:empty{display:none}
 
   <!-- ============ 二档 指标带 ============ -->
   <div class="metric-band" id="band">
-    <div class="metric"><div class="lab">加班费</div><div class="val tnum" id="mOtPay">—</div><div class="note">OT pay</div></div>
+    <div class="metric"><div class="lab">加班费</div><div class="val tnum" id="mOtPay">—</div><div class="note">加班小时 × 加班时薪</div></div>
     <div class="metric"><div class="lab">变动薪酬</div><div class="val tnum" id="mVar">—</div><div class="note">加班费 + 年终奖</div></div>
     <div class="metric"><div class="lab">等效年终奖</div><div class="val tnum" id="mEq">—</div><div class="note">占基本工资比例</div></div>
     <div class="metric"><div class="lab">总现金薪酬</div><div class="val tnum" id="mCash">—</div><div class="note">基本工资 + 变动</div></div>
@@ -1917,7 +2026,7 @@ svg.chart:empty{display:none}
 
   <!-- ============ 构成 ============ -->
   <section class="panel" id="secMix" aria-label="总薪酬包构成">
-    <div class="panel-head"><div class="panel-title">总薪酬包的构成</div></div>
+    <div class="panel-head"><h2 class="panel-title">总薪酬包的构成</h2></div>
     <div class="mix">
       <!-- A donut, not a pie: the hole is where the total goes, which is the one
            number the whole chart exists to explain. -->
@@ -1927,7 +2036,7 @@ svg.chart:empty{display:none}
       </div>
       <ul class="mix-legend tnum" id="mixLegend"></ul>
     </div>
-    <p class="panel-note" id="mixDesc">各块之和严格等于中间的总薪酬包。「PTO」是从基本工资里切出来的——两块加起来才是全额基本工资，不是额外的钱。指向任意一块（或用键盘聚焦右边的行），那一块会弹出来、其余变暗；点一下钉住，Esc 取消。</p>
+    <p class="panel-note" id="mixDesc">各块之和严格等于中间的总薪酬包。「PTO」是从基本工资里切出来的——两块加起来才是全额基本工资，不是额外的钱。指向或点按任意一块（或旁边列表里的行，也可以用键盘聚焦），那一块会弹出来、其余变暗；点一下钉住，再点一次或按 Esc 取消。</p>
   </section>
 
   <!-- ============ 税后 ============ -->
@@ -1935,7 +2044,7 @@ svg.chart:empty{display:none}
        pre-tax model stays exactly what the workbook says. -->
   <section class="panel" id="secTax" aria-label="税后到手">
     <div class="panel-head">
-      <div class="panel-title">税后到手</div>
+      <h2 class="panel-title">税后到手</h2>
       <div class="head-tools"><span class="tax-year" id="taxYearTag">2026 税率</span></div>
     </div>
     <p class="panel-note">
@@ -1960,7 +2069,7 @@ svg.chart:empty{display:none}
 
     <div class="tax-grid">
       <div class="tax-col">
-        <div class="tax-sub">税前供款</div>
+        <h3 class="tax-sub">税前供款</h3>
         <div class="field">
           <label for="c401k"><span>401(k) 员工供款</span><span class="val" id="c401kCap">上限 24,500</span></label>
           <input id="c401k" type="number" min="0" step="500" inputmode="decimal">
@@ -1977,21 +2086,33 @@ svg.chart:empty{display:none}
           <label for="cIra"><span>传统 IRA 供款</span><span class="val" id="cIraCap">上限 7,500</span></label>
           <input id="cIra" type="number" min="0" step="500" inputmode="decimal">
         </div>
+        <div class="field check">
+          <input id="cIraCovered" type="checkbox">
+          <label for="cIraCovered">有公司退休计划（401(k)、利润分享等）</label>
+        </div>
         <p class="panel-note tax-hint" id="iraHint" hidden></p>
+        <p class="panel-note tax-hint tax-warn" id="contribHint" hidden></p>
       </div>
 
       <div class="tax-col">
-        <div class="tax-sub">口径开关</div>
+        <h3 class="tax-sub">口径开关</h3>
         <div class="field">
-          <label><span>FICA（社保 + 医保）</span><span class="val" id="ficaNote">计入</span></label>
-          <div class="segmented" id="ficaToggle" role="group" aria-label="是否计算 FICA">
+          <span class="field-label"><span id="ficaLab">FICA（社保 + 医保）</span><span class="val" id="ficaNote">计入</span></span>
+          <div class="segmented" id="ficaToggle" role="group" aria-labelledby="ficaLab">
             <button type="button" data-on="1" aria-pressed="true">计入</button>
             <button type="button" data-on="0" aria-pressed="false">不计</button>
           </div>
         </div>
         <div class="field">
-          <label><span>OBBBA 加班免税</span><span class="val" id="otDedNote">计入</span></label>
-          <div class="segmented" id="otDedToggle" role="group" aria-label="是否计算 OBBBA 加班扣除">
+          <span class="field-label"><span id="otDedLab">OBBBA 加班扣除（仅 FLSA 非豁免）</span><span class="val" id="otDedNote">计入</span></span>
+          <div class="segmented" id="otDedToggle" role="group" aria-labelledby="otDedLab">
+            <button type="button" data-on="1" aria-pressed="true">计入</button>
+            <button type="button" data-on="0" aria-pressed="false">不计</button>
+          </div>
+        </div>
+        <div class="field">
+          <span class="field-label"><span id="dcOtDedLab">DC 也扣加班扣除</span><span class="val" id="dcOtDedNote">计入</span></span>
+          <div class="segmented" id="dcOtDedToggle" role="group" aria-labelledby="dcOtDedLab">
             <button type="button" data-on="1" aria-pressed="true">计入</button>
             <button type="button" data-on="0" aria-pressed="false">不计</button>
           </div>
@@ -2001,7 +2122,7 @@ svg.chart:empty{display:none}
     </div>
 
     <div class="table-scroll">
-      <table class="table stack" id="waterfall">
+      <table class="table" id="waterfall">
         <thead><tr><th>项目</th><th>金额</th><th>占总现金薪酬</th></tr></thead>
         <tbody></tbody>
       </table>
@@ -2012,13 +2133,14 @@ svg.chart:empty{display:none}
       <div class="disclosure-body">
         <p class="panel-note">
           预填的是 2026 年的数字（联邦档位与标准扣除来自 IRS Rev. Proc. 2025-32；
-          DC 档位自 2022 年起未变；社保工资上限来自 SSA；供款上限来自 IRS）。
-          每年新数字出来之后，直接在这里改。
+          DC 档位自 2022 年起未变，标准扣除取自 OTR 2026 年 D-40ES；社保工资上限来自 SSA；
+          供款上限与 IRA 退坡区间来自 IRS）。每年新数字出来之后，直接在这里改；
+          页面更新了默认税表时，会自动换成新的一年，你的供款和开关保留。
         </p>
 
         <div class="tax-grid">
           <div class="tax-col">
-            <div class="tax-sub">联邦 <span class="tax-sub-note">taxable = AGI − 标准扣除 − 加班扣除</span></div>
+            <h3 class="tax-sub">联邦 <span class="tax-sub-note">taxable = AGI − 标准扣除 − 加班扣除</span></h3>
             <div class="field">
               <label for="fedStd"><span>联邦标准扣除</span><span class="val">$</span></label>
               <input id="fedStd" type="number" min="0" step="100" inputmode="decimal">
@@ -2027,11 +2149,12 @@ svg.chart:empty{display:none}
               <thead><tr><th>该档上限 ($)</th><th>税率 (%)</th><th><span class="sr-only">操作</span></th></tr></thead>
               <tbody></tbody>
             </table>
+            <p class="panel-note tax-hint tax-warn" id="fedBrHint" hidden></p>
             <button class="btn-ghost sm quiet" type="button" data-addrow="fed">加一档</button>
           </div>
 
           <div class="tax-col">
-            <div class="tax-sub">DC <span class="tax-sub-note">taxable = AGI − DC 标准扣除</span></div>
+            <h3 class="tax-sub">DC <span class="tax-sub-note" id="dcSubNote">taxable = AGI − DC 标准扣除</span></h3>
             <div class="field">
               <label for="dcStd"><span>DC 标准扣除</span><span class="val">$</span></label>
               <input id="dcStd" type="number" min="0" step="100" inputmode="decimal">
@@ -2040,11 +2163,12 @@ svg.chart:empty{display:none}
               <thead><tr><th>该档上限 ($)</th><th>税率 (%)</th><th><span class="sr-only">操作</span></th></tr></thead>
               <tbody></tbody>
             </table>
+            <p class="panel-note tax-hint tax-warn" id="dcBrHint" hidden></p>
             <button class="btn-ghost sm quiet" type="button" data-addrow="dc">加一档</button>
           </div>
         </div>
 
-        <div class="tax-sub">FICA 与 OBBBA</div>
+        <h3 class="tax-sub">FICA 与 OBBBA</h3>
         <div class="assume-grid">
           <div class="field">
             <label for="ssRate"><span>社保税率</span><span class="val">%</span></label>
@@ -2087,13 +2211,22 @@ svg.chart:empty{display:none}
             <input id="iraLimit" type="number" min="0" step="500" inputmode="decimal">
           </div>
           <div class="field">
+            <label for="iraPhaseLo"><span>IRA 抵扣退坡起点</span><span class="val">MAGI $</span></label>
+            <input id="iraPhaseLo" type="number" min="0" step="1000" inputmode="decimal">
+          </div>
+          <div class="field">
+            <label for="iraPhaseHi"><span>IRA 抵扣退坡终点</span><span class="val">MAGI $</span></label>
+            <input id="iraPhaseHi" type="number" min="0" step="1000" inputmode="decimal">
+          </div>
+          <div class="field">
             <label for="taxYear"><span>税表年度</span><span class="val">年</span></label>
             <input id="taxYear" type="number" min="2000" step="1" inputmode="numeric">
           </div>
         </div>
 
         <div class="head-tools tax-reset">
-          <button class="btn-ghost sm quiet" type="button" id="taxResetBtn">恢复 2026 默认税表</button>
+          <button class="btn-ghost sm quiet" type="button" id="taxResetBtn">恢复默认税表</button>
+          <button class="btn-ghost sm" type="button" id="taxUndo" hidden>撤销</button>
         </div>
       </div>
     </details>
@@ -2101,11 +2234,11 @@ svg.chart:empty{display:none}
 
   <!-- ============ 反查 ============ -->
   <section class="panel" id="secReverse" aria-label="反查">
-    <div class="panel-head"><div class="panel-title">反查：想拿到等效年终奖，需要加多少班</div></div>
+    <div class="panel-head"><h2 class="panel-title">反查：想拿到等效年终奖，需要加多少班</h2></div>
 
     <div class="rev-row">
       <div class="field">
-        <label for="revPct"><span>目标等效年终奖</span><span class="val">% of base</span></label>
+        <label for="revPct"><span>目标等效年终奖</span><span class="val">占基本工资 %</span></label>
         <input id="revPct" type="number" min="0" step="0.5" value="25" inputmode="decimal">
       </div>
       <div class="readout rev-out">
@@ -2116,7 +2249,7 @@ svg.chart:empty{display:none}
     </div>
 
     <div class="table-scroll">
-      <table class="table stack" id="revTable">
+      <table class="table" id="revTable">
         <thead><tr><th>目标 %</th><th class="nocase">需要加班 (h)</th><th class="nocase">折合每周 (h)</th><th>届时总薪酬包</th></tr></thead>
         <tbody></tbody>
       </table>
@@ -2127,7 +2260,7 @@ svg.chart:empty{display:none}
   <!-- ============ 明细表 ============ -->
   <section class="panel" id="secTable" aria-label="明细表">
     <div class="panel-head">
-      <div class="panel-title">明细表</div>
+      <h2 class="panel-title">明细表</h2>
       <div class="head-tools">
         <button class="btn-ghost sm" type="button" id="copyBtn">复制表格</button>
         <button class="btn-ghost sm" type="button" id="csvBtn">导出 CSV</button>
@@ -2135,7 +2268,7 @@ svg.chart:empty{display:none}
       </div>
     </div>
     <div class="table-scroll">
-      <table class="table stack" id="schedTable">
+      <table class="table sched" id="schedTable">
         <thead><tr>
           <th class="nocase">加班 (h)</th><th>加班费</th><th>变动薪酬</th><th>等效年终奖</th>
           <th>总现金薪酬</th><th class="nocase">401(k) 匹配</th><th>利润分享</th><th>通讯补贴</th><th>总薪酬包</th>
@@ -2149,12 +2282,13 @@ svg.chart:empty{display:none}
   <!-- ============ 假设 ============ -->
   <section class="panel" id="secAssume" aria-label="假设">
     <div class="panel-head">
-      <div class="panel-title">假设</div>
+      <h2 class="panel-title">假设</h2>
       <div class="head-tools">
         <button class="btn-ghost sm quiet" type="button" id="resetBtn">恢复默认</button>
+        <button class="btn-ghost sm" type="button" id="resetUndo" hidden>撤销</button>
       </div>
     </div>
-    <p class="panel-note">全部来自原表 Backup 工作表的「可编辑假设」。改动即时生效并保存在本机。</p>
+    <p class="panel-note">预填的是示例数字，换成你自己的即可；改动即时生效，只保存在本机。公式逐格对应原表 Backup 工作表。</p>
 
     <div class="assume-grid">
       <div class="field">
@@ -2182,11 +2316,11 @@ svg.chart:empty{display:none}
            setting rather than an assumption baked into the formula. The workbook
            includes OT (F22 = $B$9*($B$5+B22)); that stays the default. -->
       <div class="field">
-        <label><span>匹配的计算基数</span><span class="val" id="matchBaseNote">跟随原表</span></label>
+        <span class="field-label"><span id="matchBaseLab">匹配的计算基数</span><span class="val" id="matchBaseNote">原表口径</span></span>
         <!-- Short labels on purpose: the field label above already says what is
              being chosen, and at three columns a longer pair forces this field to
              span two, which leaves a hole in the grid. -->
-        <div class="segmented" id="matchBaseToggle" role="group" aria-label="401(k) 匹配的计算基数">
+        <div class="segmented" id="matchBaseToggle" role="group" aria-labelledby="matchBaseLab">
           <button type="button" data-mot="1" aria-pressed="true">含加班费</button>
           <button type="button" data-mot="0" aria-pressed="false">仅基本工资</button>
         </div>
@@ -2228,14 +2362,18 @@ svg.chart:empty{display:none}
       <p class="panel-note">401(k) 匹配的计算基数可切换。原表按「基本工资 + 加班费」计算；如果你的计划文件把加班费排除在 eligible compensation 之外，切到「仅基本工资」，匹配额就不再随加班增长。切成后者时结果会与原表不一致，页面上会标出来。</p>
       <p class="panel-note">这只是现金薪酬与雇主福利的比较。加班需要额外付出工时，这一点和传统年终奖不同。利润分享按当年经济价值计入，即使次年 3、4 月才发放。</p>
       <p class="panel-note"><strong>关于 PTO</strong>：带薪休假不改变任何一个金额——它本来就含在基本工资里，所以基本工资、加班费、总薪酬包、401(k) 匹配和全部税额，加不加 PTO 都一样。加班时薪仍然按 <span class="code-inline">基本工资 ÷ 标准年工时</span> 算（这是薪资口径：除数是「工资覆盖的小时数」，PTO 不缩小它；除以 1,920 会把加班时薪算高）。PTO 真正改变的是两件事：<strong>实际每工作一小时值多少</strong>（总现金 ÷ 扣掉 PTO、加上加班的实际工时），以及<strong>加班要挤进多少周</strong>——四周 PTO 意味着只有 48 个工作周，同样 250 小时加班就从每周 4.8 变成 5.2 小时。</p>
-      <p class="panel-note">全部数值口径与 <span class="code-inline">OT_Compensation_Total_Package_Exhibit.xlsx</span> 的 Backup 工作表一致。税后板块是额外加的，原表里没有。</p>
-      <p class="panel-note"><strong>税后板块的口径</strong>：单身申报、只用标准扣除。401(k) 减联邦和 DC 的应税收入但<strong>不减 FICA</strong>；HSA 走工资扣除时连 FICA 一起减，不走工资扣除则只减所得税。OBBBA 加班扣除只作用于<strong>联邦所得税</strong>，只针对加班费里「一倍以上」的那部分溢价，按 MAGI 超过起点每 1,000 美元递减 100 美元（不足 1,000 按 1,000 计），DC 不跟随。传统 IRA 在有公司退休计划且收入较高时通常<strong>不可抵扣</strong>，页面会提示，但不会替你判断。</p>
+      <p class="panel-note">税前部分的公式逐格对应原 Excel 模型的 Backup 工作表（预填数字是示例，不是原表里的数）。税后板块是额外加的，原表里没有。</p>
+      <p class="panel-note"><strong>税后板块的口径</strong>：单身申报、只用标准扣除。401(k) 减联邦和 DC 的应税收入但<strong>不减 FICA</strong>；HSA 走工资扣除时连 FICA 一起减，不走工资扣除则只减所得税。</p>
+      <p class="panel-note"><strong>OBBBA 加班扣除</strong>（2025–2028 税年）：只有 <strong>FLSA 要求支付的加班</strong>才算——豁免（exempt）员工即使公司按 1.5 倍付了加班费，也不能扣，这时把开关切到「不计」。能扣的只是时薪一倍以上、至多 1.5 倍的那部分溢价（倍率更高时多出来的部分不算），上限 12,500；MAGI 超过 150,000 后，<strong>从扣除额里</strong>每满 1,000 美元减 100 美元（不足 1,000 的部分不计）。DC 是否跟随逐年在变、仍有争议：默认按 DC 首席财务官对 2026 年的说明计入，报税前以 OTR 当年的表格为准。</p>
+      <p class="panel-note"><strong>传统 IRA</strong>：有公司退休计划时，抵扣按 MAGI（<strong>不扣 IRA 本身</strong>）退坡，2026 年单身是 81,000–91,000；区间内按比例减少（取整到 10 美元，最少 200），超过终点就不可抵扣。不可抵扣的部分照样从到手里扣掉，只是不减税。</p>
     </div>
   </details>
 
 </main>
 
 <div class="toast hidden" id="toast"></div>
+<!-- Always in the tree, so what it is given is announced (see announce()). -->
+<div class="sr-only" id="srStatus" role="status" aria-live="polite"></div>
 
 <script>
 /* ===== motion.js ===== */
@@ -3254,21 +3392,22 @@ svg.chart:empty{display:none}
 
 </script>
 <script>
-/* ===== app.js ===== */
+/* ===== model.js ===== */
 /* ============================================================
-   app.js — the compensation model and the page wiring.
+   model.js — the compensation and tax model, and nothing else.
 
-   The model is a line-for-line port of the Backup sheet in
-   OT_Compensation_Total_Package_Exhibit.xlsx. Every formula below carries the
-   cell it came from, because that sheet is the spec and this file is the only
-   place the two can drift apart.
+   Pure functions over plain objects: no DOM, no storage, no formatting. The
+   page loads this before app.js (as window.OTModel); node loads the same file
+   with require(), which is what lets tools/model.test.js check every figure on
+   a machine with no browser at all — CI runs it on ubuntu.
+
+   The pre-tax part is a line-for-line port of the Backup sheet in
+   OT_Compensation_Total_Package_Exhibit.xlsx. Every formula carries the cell it
+   came from, because that sheet is the spec and this file is the only place the
+   two can drift apart.
    ============================================================ */
-(function () {
+(function (root) {
   "use strict";
-
-  /* ---------- storage ---------- */
-
-  var STORE = "ot_calc_v1";
 
   /* ILLUSTRATIVE STARTING VALUES — round numbers, not anybody's package.
      The structure and every formula below come from the workbook's Backup sheet
@@ -3277,9 +3416,9 @@ svg.chart:empty{display:none}
      publishes that salary. Type your own in the 假设 panel once — they are kept
      in this browser's localStorage and never leave the device.
 
-     If you do change these, the acceptance suite's expected constants have to
-     change with them — the E block at the top of tools/checks.js. Recompute them
-     from the formulas, not from what this app prints. */
+     If you do change these, the expected constants have to change with them —
+     the E block at the top of tools/checks.js and tools/model.test.js. Recompute
+     them from the formulas, not from what this app prints. */
   var DEFAULTS = {
     base: 100000,      // Backup!B5  base salary, $/yr
     stdHours: 2080,    // Backup!B6  standard annual hours
@@ -3298,13 +3437,18 @@ svg.chart:empty{display:none}
     step: 25,          // Backup!B12 display step, hours
     maxH: 625,         // Backup!B13 maximum OT hours shown
     /* Whether overtime pay counts as eligible compensation for the employer
-       match. 1/0 rather than true/false on purpose: load() coerces every saved
-       assumption with Number() and drops anything non-finite, so a boolean would
+       match. 1/0 rather than true/false on purpose: restoreState() coerces every
+       saved assumption to a number and drops anything else, so a boolean would
        silently fail to restore. The workbook includes OT, so 1 is the default. */
     matchOT: 1
   };
 
   var STEPS = [10, 25, 50, 100];
+
+  /* The schedule never grows past this many rows: a 1-hour step against a
+     100k-hour ceiling would otherwise build a table nobody asked for and freeze
+     the window while doing it. */
+  var MAX_ROWS = 400;
 
   /* ---------- tax defaults ----------
      2026, single filer. Every one of these is editable in the UI, because the
@@ -3316,7 +3460,8 @@ svg.chart:empty{display:none}
        DC standard deduction                  DC OTR 2026 D-40ES booklet
        Social Security wage base              SSA, 2026
        401(k) / IRA / HSA limits              IRS, 2026
-       Overtime deduction                     OBBBA, in force 2025-2028
+       IRA deduction phase-out (covered)      IRS, 2026: $81,000-$91,000 single
+       Overtime deduction                     OBBBA (IRC 225), in force 2025-2028
 
      A bracket's first element is the top of that band; null means "and everything
      above". Rates are percentages, the way they are written down and the way the
@@ -3336,6 +3481,11 @@ svg.chart:empty{display:none}
     addMedRate: 0.9,
     addMedThr: 200000,      // not indexed; fixed at $200k for single filers
     otDed: 1,
+    /* Whether DC follows the federal overtime deduction. It has moved year to
+       year — DC decoupled for 2025, Congress disapproved the temporary decoupling
+       act, and the CFO's 2026 guidance administers 2026 consistent with OBBBA —
+       so it is a switch, defaulted to the current guidance, not a rule. */
+    dcOtDed: 1,
     otCap: 12500,
     otPhase: 150000,
     c401k: 24500,           // prefilled at the limit, as asked
@@ -3344,20 +3494,26 @@ svg.chart:empty{display:none}
     hsaLimit: 4400,
     hsaPayroll: 1,
     ira: 0,
-    iraLimit: 7500
+    iraLimit: 7500,
+    /* Covered by a workplace retirement plan. Anyone deferring into the 401(k)
+       or receiving the profit share is, which is why it defaults on. */
+    iraCovered: 1,
+    iraPhaseLo: 81000,
+    iraPhaseHi: 91000
   };
 
   var TAX_NUM = ["year", "fedStd", "dcStd", "fica", "ssRate", "ssBase", "medRate",
-                 "addMedRate", "addMedThr", "otDed", "otCap", "otPhase",
-                 "c401k", "c401kLimit", "hsa", "hsaLimit", "hsaPayroll", "ira", "iraLimit"];
+                 "addMedRate", "addMedThr", "otDed", "dcOtDed", "otCap", "otPhase",
+                 "c401k", "c401kLimit", "hsa", "hsaLimit", "hsaPayroll", "ira", "iraLimit",
+                 "iraCovered", "iraPhaseLo", "iraPhaseHi"];
 
-  var state = {
-    a: clone(DEFAULTS),
-    t: cloneTax(TAX_DEFAULTS),
-    h: 250,
-    prec: 0,           // decimal places for money; 0 = whole dollars, 2 = cents
-    target: 25         // reverse-lookup target, in PERCENT (25 = 25%)
-  };
+  /* The user's own choices — what they contribute and which rules apply to them —
+     as opposed to the TABLE (rates, bands, limits, thresholds), which is the same
+     for everyone in a given year. A new year's defaults replace the table and
+     leave these alone, and so does 恢复默认税表. */
+  var TAX_PERSONAL = ["c401k", "hsa", "hsaPayroll", "ira", "iraCovered", "fica", "otDed", "dcOtDed"];
+
+  function clone(o) { var r = {}, k; for (k in o) if (o.hasOwnProperty(k)) r[k] = o[k]; return r; }
 
   /* The bracket arrays are nested, so a shallow clone would hand every reset the
      same rows the user had already edited. */
@@ -3366,58 +3522,6 @@ svg.chart:empty{display:none}
     r.fedBrackets = o.fedBrackets.map(function (b) { return [b[0], b[1]]; });
     r.dcBrackets = o.dcBrackets.map(function (b) { return [b[0], b[1]]; });
     return r;
-  }
-
-  /* A stored bracket table is the one piece of saved state with a shape that can
-     be wrong rather than just out of range, so it is validated rather than
-     trusted: pairs only, finite non-negative rate, ceiling a number or null. */
-  function sanitizeBrackets(raw, fallback) {
-    if (!raw || !raw.length || typeof raw.length !== "number") return fallback;
-    var out = [];
-    for (var i = 0; i < raw.length; i++) {
-      var row = raw[i];
-      if (!row || row.length < 2) continue;
-      var top = row[0] === null || row[0] === undefined ? null : Number(row[0]);
-      var rate = Number(row[1]);
-      if (top !== null && (!isFinite(top) || top < 0)) continue;
-      if (!isFinite(rate) || rate < 0) continue;
-      out.push([top, rate]);
-    }
-    return out.length ? out : fallback;
-  }
-
-  function clone(o) { var r = {}, k; for (k in o) if (o.hasOwnProperty(k)) r[k] = o[k]; return r; }
-
-  function load() {
-    var raw;
-    try { raw = localStorage.getItem(STORE); } catch (e) { return; }
-    if (!raw) return;
-    var saved;
-    try { saved = JSON.parse(raw); } catch (e) { return; }
-    if (!saved || typeof saved !== "object") return;
-    if (saved.a && typeof saved.a === "object") {
-      for (var k in DEFAULTS) {
-        if (!DEFAULTS.hasOwnProperty(k)) continue;
-        var v = Number(saved.a[k]);
-        if (isFinite(v)) state.a[k] = v;
-      }
-    }
-    if (saved.t && typeof saved.t === "object") {
-      for (var j = 0; j < TAX_NUM.length; j++) {
-        var tk = TAX_NUM[j], tv = Number(saved.t[tk]);
-        if (isFinite(tv)) state.t[tk] = tv;
-      }
-      state.t.fedBrackets = sanitizeBrackets(saved.t.fedBrackets, state.t.fedBrackets);
-      state.t.dcBrackets = sanitizeBrackets(saved.t.dcBrackets, state.t.dcBrackets);
-    }
-    if (isFinite(Number(saved.h))) state.h = Math.max(0, Number(saved.h));
-    if (saved.prec === 2 || saved.prec === 0) state.prec = saved.prec;
-    if (isFinite(Number(saved.target))) state.target = Number(saved.target);
-    if (STEPS.indexOf(state.a.step) === -1) state.a.step = DEFAULTS.step;
-  }
-
-  function save() {
-    try { localStorage.setItem(STORE, JSON.stringify(state)); } catch (e) { /* private window, quota */ }
   }
 
   /* ---------- the model ----------
@@ -3440,7 +3544,7 @@ svg.chart:empty{display:none}
   }
 
   /* Weeks actually available to work in, after PTO. NaN rather than a clamped
-     number when the assumptions make it meaningless (PTO at or beyond a full
+     number when the assumptions make it meaningless (PTO at or near a full
      year): a plausible-looking wrong divisor is worse than a dash plus a
      warning. */
   function workWeeks(a) {
@@ -3450,10 +3554,12 @@ svg.chart:empty{display:none}
     return w >= 0.5 ? w : NaN;
   }
 
-  /* Annual hours actually worked, PTO removed and overtime added. */
+  /* Annual hours actually worked, PTO removed and overtime added. Undefined on
+     exactly the same condition as workWeeks — one predicate, so the page can
+     never show a per-hour figure next to a "no working weeks" message. */
   function workedHours(a, h) {
-    var base = a.stdHours - Math.max(0, a.ptoHours || 0);
-    return base > 0 ? base + h : NaN;
+    if (!isFinite(workWeeks(a))) return NaN;
+    return a.stdHours - Math.max(0, a.ptoHours || 0) + h;
   }
 
   function compute(a, h) {
@@ -3466,6 +3572,7 @@ svg.chart:empty{display:none}
        overtime from eligible compensation actually work. */
     var match = a.matchPct * (a.base + (a.matchOT ? otPay : 0));
     var benefits = match + r.profit + a.stipend;
+    var worked = workedHours(a, h);
     return {
       h: h,
       stdHourly: r.stdHourly,
@@ -3480,8 +3587,8 @@ svg.chart:empty{display:none}
       benefits: benefits,
       total: cash + benefits,                                     // =E22+F22+G22+H22
       /* Not from the workbook — see ptoHours. */
-      workedHours: workedHours(a, h),
-      effHourly: cash / workedHours(a, h),
+      workedHours: worked,
+      effHourly: cash / worked,
       ptoValue: Math.max(0, a.ptoHours || 0) * r.stdHourly
     };
   }
@@ -3498,13 +3605,18 @@ svg.chart:empty{display:none}
     return roundHalfAway(Math.max(0, (targetFrac * a.base - a.bonus) / r.otHourly));
   }
 
+  /* How many rows the schedule WANTS (0, step, 2*step ... up to maxH), before the
+     cap. The truncation warning compares this, not maxH / step, with MAX_ROWS:
+     0..4000 at a step of 10 is 401 rows, not 400. */
+  function scheduleRowCount(a) {
+    var step = a.step > 0 ? a.step : 25, max = a.maxH > 0 ? a.maxH : 0;
+    return Math.floor(max / step) + 1;
+  }
+
   function schedule(a) {
     var rows = [], step = a.step > 0 ? a.step : 25, h = 0;
     var max = a.maxH > 0 ? a.maxH : 0;
-    /* Hard cap: a 1-hour step against a 100k-hour ceiling would otherwise build a
-       table nobody asked for and freeze the window while doing it. */
-    var limit = 400;
-    while (h <= max && rows.length < limit) { rows.push(compute(a, h)); h += step; }
+    while (h <= max && rows.length < MAX_ROWS) { rows.push(compute(a, h)); h += step; }
     return rows;
   }
 
@@ -3514,6 +3626,10 @@ svg.chart:empty{display:none}
      the workbook says no matter what happens in here. */
 
   function bracketTax(income, brackets) {
+    /* NaN in, NaN out. With standard hours at 0 the wages are undefined, and
+       answering "$0 tax" for an undefined income is exactly the plausible wrong
+       number the guard on rates() exists to prevent. */
+    if (!isFinite(income)) return NaN;
     if (!(income > 0)) return 0;
     var tax = 0, lower = 0;
     for (var i = 0; i < brackets.length; i++) {
@@ -3530,6 +3646,40 @@ svg.chart:empty{display:none}
        go untaxed, which is a silent wrong answer — tax it at the top rate. */
     if (income > lower && brackets.length) tax += (income - lower) * (brackets[brackets.length - 1][1] / 100);
     return tax;
+  }
+
+  /* The ways a bracket table can be typed that bracketTax will read differently
+     from how it looks — it never guesses, it skips — so the page can say so
+     instead of quietly taxing a different table. */
+  function bracketIssues(rows) {
+    var out = [], lower = 0;
+    for (var i = 0; i < rows.length; i++) {
+      var top = rows[i][0];
+      if (top === null || top === undefined) {
+        if (i < rows.length - 1) out.push({ i: i, kind: "open-not-last" });
+        break;                                        // everything after an open band is unreachable
+      }
+      if (top <= lower) { out.push({ i: i, kind: "not-ascending" }); continue; }
+      lower = top;
+    }
+    return out;
+  }
+
+  /* The traditional-IRA deduction limit for someone covered by a workplace plan.
+     The MAGI here is AGI figured WITHOUT the IRA deduction itself (IRC
+     219(g)(3)(A)) — measured after it, a contribution could argue its own way
+     back under the band. Across the band the limit shrinks in proportion; the
+     reduction is rounded DOWN to $10, and a limit that survives at all is at
+     least $200 (219(g)(2)(B),(C)). */
+  function iraDeductionLimit(magi, t) {
+    var limit = Math.max(0, t.iraLimit || 0);
+    if (!t.iraCovered) return limit;
+    var lo = t.iraPhaseLo, hi = t.iraPhaseHi;
+    if (!(magi > lo)) return limit;
+    if (!(hi > lo) || magi >= hi) return 0;
+    var cut = Math.floor(limit * (magi - lo) / (hi - lo) / 10 + 1e-9) * 10;
+    var left = Math.max(0, limit - cut);
+    return left > 0 && left < 200 ? 200 : left;
   }
 
   function computeTax(c, a, t) {
@@ -3549,20 +3699,41 @@ svg.chart:empty{display:none}
     var fica = t.fica ? ss + med : 0;
 
     var fedWages = Math.max(0, wages - k401 - (hsaPayroll ? hsa : 0));
-    var agi = Math.max(0, fedWages - ira - (hsaPayroll ? 0 : hsa));
 
-    /* Only the PREMIUM half of time-and-a-half qualifies, not the whole overtime
-       payment: at 1.5x that is one third of OT pay. */
-    var otPremium = Math.max(0, c.h * c.stdHourly * (a.otMult - 1));
+    /* A nondeductible IRA contribution still leaves the pay packet — take-home
+       subtracts the full amount below — it just does not cut the tax. */
+    var iraMagi = Math.max(0, fedWages - (hsaPayroll ? 0 : hsa));
+    var iraCap = iraDeductionLimit(iraMagi, t);
+    var iraDeduction = Math.min(ira, iraCap);
+    var agi = Math.max(0, iraMagi - iraDeduction);
+
+    /* Qualified overtime compensation (IRC 225(c)) is overtime that section 7 of
+       the FLSA REQUIRES, and only the part above the regular rate. The FLSA
+       requires time-and-a-half, so at most half the regular rate per hour
+       qualifies: at a 2x policy rate the second half-rate of premium is the
+       employer's, not the statute's. An FLSA-exempt employee has none at all,
+       whatever they are paid — that is what the otDed switch is for. */
+    var qualMult = Math.max(0, Math.min(a.otMult, 1.5) - 1);
+    var otPremium = Math.max(0, c.h * c.stdHourly * qualMult);
+
+    /* IRC 225(b): the deduction is the smaller of that premium and $12,500, and
+       THAT amount is reduced by $100 for every full $1,000 of MAGI over $150,000.
+       Two things the statute and Schedule 1-A (lines 15-21) are exact about and
+       that are easy to get backwards: the reduction comes off the deduction, not
+       off the $12,500 cap — cutting the cap leaves anyone whose premium is under
+       it untouched until the cap falls below the premium — and a partial $1,000
+       does not count (line 19: "decrease the result to the next lower whole
+       number"; rounding up is the car-loan deduction's rule, not this one's). */
     var over = Math.max(0, agi - t.otPhase);
-    /* $100 for each $1,000 over the threshold, a partial $1,000 counting as a
-       whole one. */
-    var cap = Math.max(0, t.otCap - Math.ceil(over / 1000) * 100);
-    var otDeduction = t.otDed ? Math.min(otPremium, cap) : 0;
+    var otAllowed = Math.min(otPremium, Math.max(0, t.otCap));
+    var otReduction = Math.floor(over / 1000 + 1e-9) * 100;
+    var otYearOk = t.year >= 2025 && t.year <= 2028;    // enacted for 2025 through 2028
+    var otDeduction = t.otDed && otYearOk ? Math.max(0, otAllowed - otReduction) : 0;
 
     var fedTaxable = Math.max(0, agi - t.fedStd - otDeduction);
-    /* DC starts from federal AGI and does not conform to the overtime deduction. */
-    var dcTaxable = Math.max(0, agi - t.dcStd);
+    /* DC starts from federal AGI; whether it takes the overtime deduction too is
+       the dcOtDed switch (see TAX_DEFAULTS). */
+    var dcTaxable = Math.max(0, agi - t.dcStd - (t.dcOtDed ? otDeduction : 0));
 
     var fedTax = bracketTax(fedTaxable, t.fedBrackets);
     var dcTax = bracketTax(dcTaxable, t.dcBrackets);
@@ -3571,7 +3742,9 @@ svg.chart:empty{display:none}
     return {
       wages: wages, k401: k401, hsa: hsa, ira: ira,
       fica: fica, ss: ss, med: med, ficaWages: ficaWages,
-      agi: agi, otPremium: otPremium, otCap: cap, otDeduction: otDeduction,
+      iraMagi: iraMagi, iraCap: iraCap, iraDeduction: iraDeduction,
+      agi: agi, otPremium: otPremium, otAllowed: otAllowed, otReduction: otReduction,
+      otYearOk: otYearOk, otDeduction: otDeduction,
       fedTaxable: fedTaxable, dcTaxable: dcTaxable,
       fedTax: fedTax, dcTax: dcTax, totalTax: totalTax,
       takeHome: wages - k401 - hsa - ira - totalTax,
@@ -3579,9 +3752,10 @@ svg.chart:empty{display:none}
     };
   }
 
-  /* The rate on the NEXT dollar of wages, measured rather than derived from the
-     bracket table — that way it automatically accounts for FICA, the wage base,
-     additional Medicare and the overtime phase-out all at once. */
+  /* The rate on the NEXT dollar of ordinary wages, measured rather than derived
+     from the bracket table — that way it automatically accounts for FICA, the
+     wage base and additional Medicare all at once. An overtime dollar is taxed
+     differently (see otNetPerHour). */
   function marginalRate(c, a, t) {
     var step = 1000;
     var bumped = {};
@@ -3589,6 +3763,204 @@ svg.chart:empty{display:none}
     bumped.cash = c.cash + step;
     var lo = computeTax(c, a, t), hi = computeTax(bumped, a, t);
     return (hi.totalTax - lo.totalTax) / step;
+  }
+
+  /* What one more overtime hour actually leaves after every tax it touches. NOT
+     otHourly x (1 - marginalRate): part of an overtime dollar is qualified
+     premium, which the overtime deduction takes back out of taxable income, so
+     it is taxed less than the ordinary dollar marginalRate measures. Measured by
+     difference, over $1,000 of overtime pay rather than one hour, because the
+     OBBBA phase-out moves in $100 steps per $1,000 of MAGI and a one-hour
+     difference would jump. */
+  function otNetPerHour(a, t, h) {
+    var c0 = compute(a, h);
+    if (!(c0.otHourly > 0)) return NaN;
+    var dh = 1000 / c0.otHourly;
+    var c1 = compute(a, h + dh);
+    return (computeTax(c1, a, t).takeHome - computeTax(c0, a, t).takeHome) / dh;
+  }
+
+  /* ---------- persistence ----------
+     The page owns localStorage; this owns what a saved blob MEANS, so it can be
+     tested without a browser. */
+
+  var STORE_VERSION = 2;
+  /* Saves made before the version stamp existed were all made against the 2026
+     table — it is the only one that ever shipped without one. */
+  var LEGACY_TABLE_YEAR = 2026;
+
+  /* Number(null) and Number("") are both 0, and 0 is finite — so a stored null
+     would quietly become a $0 salary. Only a real number, or a non-empty numeric
+     string, counts as a value. */
+  function num(v) {
+    if (typeof v === "number") return v;
+    if (typeof v === "string" && v.trim() !== "") return Number(v);
+    return NaN;
+  }
+
+  /* A stored bracket table is the one piece of saved state with a shape that can
+     be wrong rather than just out of range, so it is validated rather than
+     trusted: pairs only, finite non-negative rate, ceiling a number or null. */
+  function sanitizeBrackets(raw, fallback) {
+    if (!raw || !raw.length || typeof raw.length !== "number") return fallback;
+    var out = [];
+    for (var i = 0; i < raw.length; i++) {
+      var row = raw[i];
+      if (!row || row.length < 2) continue;
+      var top = row[0] === null || row[0] === undefined ? null : num(row[0]);
+      var rate = num(row[1]);
+      if (top !== null && (!isFinite(top) || top < 0)) continue;
+      if (!isFinite(rate) || rate < 0) continue;
+      out.push([top, rate]);
+    }
+    return out.length ? out : fallback;
+  }
+
+  function freshState() {
+    return { a: clone(DEFAULTS), t: cloneTax(TAX_DEFAULTS), h: 250, prec: 0, target: 25 };
+  }
+
+  /* Turn a parsed saved blob back into a state. Anything missing, malformed or
+     out of shape falls back to the default for that field alone.
+
+     The tax TABLE is stamped with the defaults year it was saved against. When
+     this build ships a newer table, a returning visitor gets it — without that,
+     save() having stored the whole table on their first visit would pin them to
+     it forever, whether or not they ever opened the editor. Their own choices
+     (TAX_PERSONAL) carry over. The one exception is a 401(k) or HSA figure that
+     sat exactly at an ordinary old limit: that is what "prefilled at the limit"
+     meant, so it follows the limit up. A limit the user had raised past this
+     year's default (a catch-up) is theirs and is left alone. `taxUpdatedFrom` and
+     `taxMoved` tell the page to say what happened. */
+  function restoreState(saved) {
+    var s = freshState();
+    s.taxUpdatedFrom = null;
+    s.taxMoved = [];
+    if (!saved || typeof saved !== "object") return s;
+
+    if (saved.a && typeof saved.a === "object") {
+      for (var k in DEFAULTS) {
+        if (!DEFAULTS.hasOwnProperty(k)) continue;
+        var v = num(saved.a[k]);
+        if (isFinite(v)) s.a[k] = v;
+      }
+    }
+    if (STEPS.indexOf(s.a.step) === -1) s.a.step = DEFAULTS.step;
+
+    if (saved.t && typeof saved.t === "object") {
+      var tv = num(saved.tv);
+      if (!isFinite(tv)) tv = LEGACY_TABLE_YEAR;
+      var stale = tv < TAX_DEFAULTS.year;
+      var keys = stale ? TAX_PERSONAL : TAX_NUM;
+      for (var j = 0; j < keys.length; j++) {
+        var tk = keys[j], x = num(saved.t[tk]);
+        if (isFinite(x)) s.t[tk] = x;
+      }
+      if (stale) {
+        [["c401k", "c401kLimit"], ["hsa", "hsaLimit"]].forEach(function (p) {
+          var was = num(saved.t[p[0]]), oldLimit = num(saved.t[p[1]]), newLimit = TAX_DEFAULTS[p[1]];
+          if (isFinite(was) && was === oldLimit && oldLimit <= newLimit && was !== newLimit) {
+            s.t[p[0]] = newLimit;
+            s.taxMoved.push([p[0], was, newLimit]);
+          }
+        });
+        s.taxUpdatedFrom = tv;
+      } else {
+        s.t.fedBrackets = sanitizeBrackets(saved.t.fedBrackets, s.t.fedBrackets);
+        s.t.dcBrackets = sanitizeBrackets(saved.t.dcBrackets, s.t.dcBrackets);
+      }
+    }
+
+    var h = num(saved.h);
+    if (isFinite(h)) s.h = Math.max(0, Math.round(h));
+    if (saved.prec === 2 || saved.prec === 0) s.prec = saved.prec;
+    var target = num(saved.target);
+    if (isFinite(target)) s.target = Math.max(0, target);
+    return s;
+  }
+
+  function serializeState(s) {
+    return JSON.stringify({
+      v: STORE_VERSION, tv: TAX_DEFAULTS.year,
+      a: s.a, t: s.t, h: s.h, prec: s.prec, target: s.target
+    });
+  }
+
+  /* Put the table back to this build's defaults and keep the user's own choices. */
+  function resetTaxTable(t) {
+    var r = cloneTax(TAX_DEFAULTS);
+    TAX_PERSONAL.forEach(function (k) { r[k] = t[k]; });
+    return r;
+  }
+
+  var api = {
+    DEFAULTS: DEFAULTS, STEPS: STEPS, MAX_ROWS: MAX_ROWS,
+    TAX_DEFAULTS: TAX_DEFAULTS, TAX_NUM: TAX_NUM, TAX_PERSONAL: TAX_PERSONAL,
+    clone: clone, cloneTax: cloneTax,
+    rates: rates, workWeeks: workWeeks, workedHours: workedHours, compute: compute,
+    roundHalfAway: roundHalfAway, hoursForTarget: hoursForTarget,
+    scheduleRowCount: scheduleRowCount, schedule: schedule,
+    bracketTax: bracketTax, bracketIssues: bracketIssues, iraDeductionLimit: iraDeductionLimit,
+    computeTax: computeTax, marginalRate: marginalRate, otNetPerHour: otNetPerHour,
+    num: num, sanitizeBrackets: sanitizeBrackets, freshState: freshState,
+    restoreState: restoreState, serializeState: serializeState, resetTaxTable: resetTaxTable
+  };
+
+  if (typeof module === "object" && module.exports) module.exports = api;
+  else root.OTModel = api;
+}(typeof window !== "undefined" ? window : this));
+
+</script>
+<script>
+/* ===== app.js ===== */
+/* ============================================================
+   app.js — the page: formatting, rendering and input wiring.
+
+   The model itself (the workbook's formulas, the tax rules, what a saved blob
+   means) is web/model.js, which loads first and which tools/model.test.js runs
+   in node.
+   ============================================================ */
+(function () {
+  "use strict";
+
+  /* The model — every formula, the tax rules, and what a saved blob means — is
+     web/model.js, loaded first. This file is the page: formatting, rendering,
+     and wiring the inputs to the model. */
+  var M = window.OTModel;
+  var DEFAULTS = M.DEFAULTS, STEPS = M.STEPS, TAX_DEFAULTS = M.TAX_DEFAULTS;
+  var clone = M.clone, rates = M.rates, workWeeks = M.workWeeks, compute = M.compute;
+  var hoursForTarget = M.hoursForTarget, schedule = M.schedule;
+  var computeTax = M.computeTax, marginalRate = M.marginalRate, otNetPerHour = M.otNetPerHour;
+
+  /* ---------- storage ---------- */
+
+  /* The key predates the version stamp that now lives INSIDE the blob (see
+     serializeState); it is kept so that figures saved by earlier builds carry
+     over instead of vanishing. */
+  var STORE = "ot_calc_v1";
+
+  var state = M.freshState();
+  /* Set by load() when the saved tax table was older than this build's defaults
+     and has just been replaced by them; the page says so once, after the first
+     render. */
+  var taxUpdatedFrom = null, taxMoved = [];
+
+  function load() {
+    var raw;
+    try { raw = localStorage.getItem(STORE); } catch (e) { return; }
+    if (!raw) return;
+    var saved;
+    try { saved = JSON.parse(raw); } catch (e) { return; }
+    var s = M.restoreState(saved);
+    taxUpdatedFrom = s.taxUpdatedFrom;
+    taxMoved = s.taxMoved;
+    delete s.taxUpdatedFrom;
+    delete s.taxMoved;
+    state = s;
+  }
+
+  function save() {
+    try { localStorage.setItem(STORE, M.serializeState(state)); } catch (e) { /* private window, quota */ }
   }
 
   /* ---------- formatting ---------- */
@@ -3694,6 +4066,58 @@ svg.chart:empty{display:none}
   function on(el, ev, fn) { if (el) el.addEventListener(ev, fn); }
   function txt(id, s) { var e = $(id); if (e) e.textContent = s; }
 
+  /* Every message the page speaks goes through here. The kit's toast element is
+     display:none between messages and gets its text in the same task that
+     reveals it, which screen readers do not reliably announce; a visually hidden
+     status region that is always in the tree does. Messages from one render are
+     QUEUED and spoken together — two calls in a row used to overwrite each other
+     before either was read. The region is cleared first and refilled a beat
+     later, so the same message twice in a row is still announced. */
+  var announceQueue = [], announceTimer = null;
+  function announce(msg) {
+    var r = $("srStatus");
+    if (!r || !msg) return;
+    if (announceQueue.indexOf(msg) === -1) announceQueue.push(msg);
+    if (announceTimer) return;
+    r.textContent = "";
+    announceTimer = setTimeout(function () {
+      r.textContent = announceQueue.join(" ");
+      announceQueue = [];
+      announceTimer = null;
+    }, 30);
+  }
+
+  function toast(msg, bad) {
+    var el = UIKit.toast(msg, !!bad);
+    announce(msg);
+    return el;
+  }
+
+  /* 撤销 lives next to the button that did the reset, not inside the toast: the
+     kit's toast leaves on a fixed 3.6 s timer whether or not it has focus, and it
+     sits at the end of the page — 14 to 54 Tab stops away. Here it is the very
+     next stop after the reset button, and it stays for 10 s. Undo hands focus
+     back to the reset button. */
+  var undoTimers = {};
+  function offerUndo(btnId, resetBtnId, run) {
+    var b = $(btnId);
+    if (!b) return;
+    clearTimeout(undoTimers[btnId]);
+    b.hidden = false;
+    b.onclick = function () {
+      clearTimeout(undoTimers[btnId]);
+      b.hidden = true;
+      run();
+      var r = $(resetBtnId);
+      if (r) r.focus();
+    };
+    undoTimers[btnId] = setTimeout(function () {
+      var hadFocus = document.activeElement === b;
+      b.hidden = true;
+      if (hadFocus && $(resetBtnId)) $(resetBtnId).focus();
+    }, 10000);
+  }
+
   var els = {};
   ["heroVal", "heroSub", "hSlider", "hSliderVal", "hExact", "hWeek", "hTicks",
    "mOtPay", "mVar", "mEq", "mCash", "sMatch", "sProfit", "sStipend", "sStd", "sOt", "sBenefit",
@@ -3734,7 +4158,7 @@ svg.chart:empty{display:none}
        directly above the number it describes. */
     var withOT = !!state.a.matchOT;
     txt("aMatchUnit", withOT ? "% of 基本 + 加班费" : "% of 基本工资");
-    txt("matchBaseNote", withOT ? "跟随原表" : "与原表不同");
+    txt("matchBaseNote", withOT ? "原表口径" : "与原表口径不同");
     var note = $("matchBaseNote");
     if (note) note.classList.toggle("off-book", !withOT);
 
@@ -3787,12 +4211,15 @@ svg.chart:empty{display:none}
     els.hTicks.style.marginRight = Math.max(0, Math.round(r.right - s.right)) + "px";
   }
 
-  function renderNumbers(c) {
+  function renderNumbers(c, tx) {
     var d = displayOf(c, state.a);
     txt("heroVal", money(d.total));
+    /* The take-home figure is the one most people came for, and on a first visit
+       its own section starts below the fold — so the hero carries it too. */
     txt("heroSub", isFinite(d.total)
       ? "在 " + hrs(d.h) + " 加班下，总现金薪酬 " + money(d.cash) + " + 雇主福利 " + money(d.benefits) + "。"
       : "请先填写有效的基本工资与标准年工时。");
+    txt("heroTake", isFinite(d.total) && isFinite(tx.home) ? "税后到手约 " + money(tx.home) + "（估算，见下方「税后」）" : "");
 
     txt("mOtPay", money(d.otPay));
     txt("mVar", money(d.variable));
@@ -3815,26 +4242,45 @@ svg.chart:empty{display:none}
      means two different numbers depending on PTO and the difference is the whole
      point of having entered it. */
   function renderDialNote() {
-    var w = workWeeks(state.a), pto = Math.max(0, state.a.ptoHours || 0);
+    var a = state.a, w = workWeeks(a), pto = Math.max(0, a.ptoHours || 0);
+    /* Name the actual cause. With standard hours at 0 there are no weeks either,
+       and blaming PTO for that sends the reader to the wrong field. */
     txt("dialNote", isFinite(w)
       ? "按 " + (Math.round(w * 10) / 10) + " 个工作周折算（一年 52 周，减去 " + nf(0).format(pto) +
-        " 小时 PTO）。滑杆与两个输入框始终同步；下方「显示步长」只决定明细表的行距。"
-      : "PTO 超过了标准年工时，没有可用的工作周，折合每周无法计算。");
+        " 小时 PTO）。滑杆与两个输入框始终同步；下方「显示步长」只决定明细表每行的间隔。"
+      : !(a.stdHours > 0)
+        ? "标准年工时为 0，没有可用的工作周，折合每周无法计算。"
+        : "PTO 几乎占满了标准年工时，没有可用的工作周，折合每周无法计算。");
   }
 
+  var lastWarn = "";
   function renderWarnings() {
     var a = state.a, msgs = [];
-    if (!(a.base > 0)) msgs.push("基本工资必须大于 0，否则时薪与等效年终奖都无法计算。");
-    if (!(a.stdHours > 0)) msgs.push("标准年工时必须大于 0。");
-    if (a.maxH > 0 && a.step > 0 && a.maxH / a.step > 400) msgs.push("明细表上限相对步长过大，表格已截断到 400 行。");
+    var bad = { aBase: !(a.base > 0), aHours: !(a.stdHours > 0),
+                aPto: a.stdHours > 0 && !isFinite(workWeeks(a)) };
+    if (bad.aBase) msgs.push("基本工资必须大于 0，否则时薪与等效年终奖都无法计算。");
+    if (bad.aHours) msgs.push("标准年工时必须大于 0。");
+    if (M.scheduleRowCount(a) > M.MAX_ROWS) msgs.push("明细表上限相对步长过大，表格已截断到 " + M.MAX_ROWS + " 行。");
     if (state.h > a.maxH) msgs.push("当前加班小时超出了明细表上限，曲线与表格只画到上限为止。");
-    if (a.stdHours > 0 && (a.ptoHours || 0) >= a.stdHours)
-      msgs.push("PTO 不能达到或超过标准年工时，否则没有工作周可言，「折合每工作周」和「实际时薪」都算不出来。");
-    var box = els.warnBox;
+    if (bad.aPto)
+      msgs.push("PTO 几乎占满了标准年工时，没有工作周可言，「折合每工作周」和「实际时薪」都算不出来。");
+
+    /* The message box sits near the top of the page and the field that caused it
+       can be a dozen screens further down on a phone, so the FIELD is marked too —
+       visibly (the kit's .invalid) and for AT (aria-invalid). */
+    for (var id in bad) {
+      if (!bad.hasOwnProperty(id) || !els[id]) continue;
+      els[id].classList.toggle("invalid", bad[id]);
+      if (bad[id]) els[id].setAttribute("aria-invalid", "true"); else els[id].removeAttribute("aria-invalid");
+    }
+
+    var box = els.warnBox, text = msgs.join(" ");
+    if (text !== lastWarn && text) announce(text);
+    lastWarn = text;
     if (!box) return;
     if (!msgs.length) { box.hidden = true; box.textContent = ""; return; }
     box.hidden = false;
-    box.textContent = msgs.join(" ");
+    box.textContent = text;
   }
 
   /* Narrow-screen card labels are copied from the LIVE header cells, so they
@@ -3861,9 +4307,19 @@ svg.chart:empty{display:none}
     return '<button type="button" class="hjump" data-h="' + h + '">' + nf(0).format(h) + "</button>";
   }
 
-  function renderSchedule(rows) {
+  /* Neither table depends on the selected hours — only on the assumptions, the
+     precision and (for the reverse table) the target — so a slider drag rebuilds
+     neither; markCurrent moves the highlight. At the 400-row cap a rebuild per
+     input event is what made a drag miss its frames. */
+  var schedKey = null, revKey = null;
+
+  function renderSchedule() {
     var t = els.schedTable;
     if (!t) return;
+    var key = JSON.stringify(state.a) + "|" + state.prec;
+    if (key === schedKey) return;
+    schedKey = key;
+    var rows = schedule(state.a);
     var body = t.tBodies[0], html = "";
     for (var i = 0; i < rows.length; i++) {
       var r = displayOf(rows[i], state.a);
@@ -3886,12 +4342,15 @@ svg.chart:empty{display:none}
   function renderReverse() {
     var t = els.revTable;
     if (!t) return;
+    var key = JSON.stringify(state.a) + "|" + state.prec + "|" + state.target;
+    if (key === revKey) return;
+    revKey = key;
     var body = t.tBodies[0], html = "", i;
     for (i = 10; i <= 50; i += 5) {
       var need = hoursForTarget(state.a, i / 100);
       var c = compute(state.a, isFinite(need) ? need : 0);
       var d = displayOf(c, state.a);
-      html += '<tr data-h="' + (isFinite(need) ? need : 0) + '">' +
+      html += "<tr" + (isFinite(need) ? ' data-h="' + need + '"' : "") + ">" +
         "<td>" + i + "%</td>" +
         "<td>" + (isFinite(need) ? jumpCell(need) : "—") + "</td>" +
         "<td>" + perWeek(need) + "</td>" +
@@ -3913,21 +4372,36 @@ svg.chart:empty{display:none}
      keyboard user pressing Enter on a row jump would land back on <body> with the
      page scrolled somewhere else — the control they were using stops existing as
      a direct result of using it. Remember which one it was and give it back. */
+  /* Remembered by ROW, not by hour value: in the reverse table several targets
+     can need the same number of hours (every target the bonus alone already
+     covers needs 0 h), and looking the button up by its hours hands focus to the
+     first of them rather than the one that was pressed. */
   var pendingFocus = null;
   function rememberJumpFocus(btn) {
-    pendingFocus = btn && btn.closest("table") ?
-      { table: btn.closest("table").id, h: btn.getAttribute("data-h") } : null;
+    var tr = btn && btn.closest("tr"), table = btn && btn.closest("table");
+    pendingFocus = tr && table ? { table: table.id, row: tr.sectionRowIndex } : null;
   }
+  /* Only ever GIVES BACK focus that the rebuild took away — i.e. when it is on
+     <body>. A restore left armed by a jump that turned out to be a no-op used to
+     fire on the next unrelated render and yank focus out of whatever field the
+     user had moved on to. */
   function restoreJumpFocus() {
     if (!pendingFocus) return;
-    var t = document.getElementById(pendingFocus.table);
-    var b = t && t.querySelector('.hjump[data-h="' + pendingFocus.h + '"]');
+    var p = pendingFocus;
     pendingFocus = null;
+    var a = document.activeElement;
+    if (a && a !== document.body) return;
+    var t = document.getElementById(p.table);
+    var tr = t && t.tBodies[0] && t.tBodies[0].rows[p.row];
+    var b = tr && tr.querySelector(".hjump");
     if (b) b.focus();
   }
 
+  /* Only rows that STAND FOR an hour count. The waterfall and the bracket tables
+     have no data-h, and Number(null) is 0 — so at 0 overtime hours every one of
+     their rows used to light up as "current". */
   function markCurrent() {
-    [].forEach.call(document.querySelectorAll(".table tbody tr"), function (tr) {
+    [].forEach.call(document.querySelectorAll(".table tbody tr[data-h]"), function (tr) {
       tr.classList.toggle("is-current", Number(tr.getAttribute("data-h")) === state.h);
     });
   }
@@ -4103,6 +4577,7 @@ svg.chart:empty{display:none}
     addMedRate: "addMedRate", addMedThr: "addMedThr",
     otCap: "otCap", otPhase: "otPhase",
     c401kLimit: "c401kLimit", hsaLimit: "hsaLimit", iraLimit: "iraLimit",
+    iraPhaseLo: "iraPhaseLo", iraPhaseHi: "iraPhaseHi",
     taxYear: "year"
   };
 
@@ -4124,7 +4599,11 @@ svg.chart:empty{display:none}
     t.tBodies[0].innerHTML = html;
   }
 
-  function renderTaxInputs() {
+  /* The fields, switches and labels — everything EXCEPT the bracket rows. Kept
+     apart because the blur handlers call this: rebuilding the bracket <tbody>
+     on blur replaced the very input focus was moving into, so Tab from 联邦标准
+     扣除 landed on <body> and the next Tab went back to the top of the page. */
+  function renderTaxFields() {
     for (var id in TAX_FIELDS) {
       if (!TAX_FIELDS.hasOwnProperty(id)) continue;
       var el = $(id);
@@ -4132,8 +4611,11 @@ svg.chart:empty{display:none}
     }
     var cb = $("cHsaPayroll");
     if (cb) cb.checked = !!state.t.hsaPayroll;
+    var cov = $("cIraCovered");
+    if (cov) cov.checked = !!state.t.iraCovered;
 
-    [["ficaToggle", "fica", "ficaNote"], ["otDedToggle", "otDed", "otDedNote"]].forEach(function (x) {
+    [["ficaToggle", "fica", "ficaNote"], ["otDedToggle", "otDed", "otDedNote"],
+     ["dcOtDedToggle", "dcOtDed", "dcOtDedNote"]].forEach(function (x) {
       var g = $(x[0]);
       if (g) {
         [].forEach.call(g.querySelectorAll("button"), function (b) {
@@ -4149,46 +4631,88 @@ svg.chart:empty{display:none}
     txt("c401kCap", "上限 " + nf(0).format(state.t.c401kLimit));
     txt("cHsaCap", "上限 " + nf(0).format(state.t.hsaLimit));
     txt("cIraCap", "上限 " + nf(0).format(state.t.iraLimit));
+    /* Named from the defaults this build ships, not hard-coded in the markup — a
+       2027 build would otherwise offer to "restore 2026" and do something else. */
+    txt("taxResetBtn", "恢复 " + TAX_DEFAULTS.year + " 默认税表");
+    txt("dcSubNote", "taxable = AGI − DC 标准扣除" + (state.t.dcOtDed ? " − 加班扣除" : ""));
+  }
 
+  function renderTaxInputs() {
+    renderTaxFields();
     renderBrackets("fedBrackets", "fedBrackets");
     renderBrackets("dcBrackets", "dcBrackets");
   }
 
-  function renderTax(c) {
-    var t = state.t, x = computeTax(c, state.a, t);
-    var d = displayOf(c, state.a);
+  /* bracketTax never guesses at a mistyped table — it skips what it cannot read —
+     so say what it skipped, next to the table. */
+  var lastBrWarn = {};
+  function renderBracketHints() {
+    [["fedBrackets", "fedBrHint"], ["dcBrackets", "dcBrHint"]].forEach(function (x) {
+      var el = $(x[1]);
+      if (!el) return;
+      var issues = M.bracketIssues(state.t[x[0]]);
+      var msgs = issues.map(function (p) {
+        return p.kind === "open-not-last"
+          ? "第 " + (p.i + 1) + " 档上限留空表示「以上全部」，它后面的档都不会参与计算——只有最后一档可以留空。"
+          : "第 " + (p.i + 1) + " 档上限不高于上一档，这一档没有参与计算。";
+      });
+      el.hidden = !msgs.length;
+      el.textContent = msgs.join(" ");
+      /* Same treatment as every other warning: marked on the offending ceiling
+         and spoken once when it changes. */
+      var bad = issues.map(function (p) { return p.i; });
+      [].forEach.call(document.querySelectorAll("#" + x[0] + ' input[data-f="top"]'), function (inp) {
+        var on = bad.indexOf(Number(inp.getAttribute("data-i"))) !== -1;
+        inp.classList.toggle("invalid", on);
+        if (on) { inp.setAttribute("aria-invalid", "true"); inp.setAttribute("aria-describedby", x[1]); }
+        else { inp.removeAttribute("aria-invalid"); inp.removeAttribute("aria-describedby"); }
+      });
+      var text = el.textContent;
+      if (text && text !== lastBrWarn[x[0]]) announce(text);
+      lastBrWarn[x[0]] = text;
+    });
+  }
 
-    /* Quantized the same way the rest of the page is, and the waterfall's last
-       line is the SUM of the lines above it rather than a separately rounded
-       figure — same rule, same reason (see displayOf). */
+  /* The tax result in display space: quantized the same way the rest of the page
+     is, with take-home the SUM of the lines above it rather than a separately
+     rounded figure — same rule, same reason (see displayOf). */
+  function taxDisplay(c) {
+    var x = computeTax(c, state.a, state.t);
     var wages = q(x.wages), k401 = q(x.k401), hsa = q(x.hsa), ira = q(x.ira);
     var fed = q(x.fedTax), dc = q(x.dcTax), fica = q(x.fica);
     var taxSum = fed + dc + fica;
-    var home = wages - k401 - hsa - ira - taxSum;
+    return { x: x, wages: wages, k401: k401, hsa: hsa, ira: ira, fed: fed, dc: dc, fica: fica,
+             taxSum: taxSum, home: wages - k401 - hsa - ira - taxSum };
+  }
+
+  var lastContribWarn = "";
+  function renderTax(c, tx) {
+    var t = state.t, x = tx.x;
+    var wages = tx.wages, home = tx.home, taxSum = tx.taxSum;
 
     txt("tHome", money(home));
     txt("tTax", money(taxSum));
     txt("tEff", wages > 0 ? pct(taxSum / wages) : "—");
-    var marg = marginalRate(c, state.a, t);
-    txt("tMarg", pct(marg));
+    txt("tMarg", pct(marginalRate(c, state.a, t)));
 
     /* The after-tax counterparts of the pre-tax strip, with PTO inside the
        divisor because these are hours actually WORKED, not hours paid.
-       每加班小时净得 uses the MARGINAL rate, not the effective one: an extra
-       overtime hour is taxed at the top of the stack, not at the average. */
+       每加班小时净得 is measured, not derived from the marginal rate: an overtime
+       dollar partly escapes federal (and DC) tax through the overtime deduction,
+       so it is not taxed like the ordinary dollar 边际税率 describes. */
     txt("tEffHourly", rate(home / c.workedHours));
-    txt("tOtNet", rate(c.otHourly * (1 - marg)));
+    txt("tOtNet", rate(otNetPerHour(state.a, t, state.h)));
     var wk = workWeeks(state.a);
     txt("tPerWeek", isFinite(wk) ? money(home / wk) : "—");
 
     var rows = [
       ["总现金薪酬", wages, "+"],
-      ["401(k) 员工供款", -k401, "-"],
-      ["HSA 供款", -hsa, "-"],
-      ["传统 IRA 供款", -ira, "-"],
-      ["联邦所得税", -fed, "-"],
-      ["DC 所得税", -dc, "-"],
-      ["FICA（社保 + 医保）", -fica, "-"],
+      ["401(k) 员工供款", -tx.k401, "-"],
+      ["HSA 供款", -tx.hsa, "-"],
+      ["传统 IRA 供款", -tx.ira, "-"],
+      ["联邦所得税", -tx.fed, "-"],
+      ["DC 所得税", -tx.dc, "-"],
+      ["FICA（社保 + 医保）", -tx.fica, "-"],
       ["到手现金", home, "="]
     ];
     var body = $("waterfall") && $("waterfall").tBodies[0];
@@ -4206,47 +4730,93 @@ svg.chart:empty{display:none}
       labelCells($("waterfall"));
     }
 
-    /* Say what the overtime deduction actually did. "计入" on its own does not
-       tell you it was phased out to zero. */
+    /* Say what the overtime deduction actually did, step by step, and who it is
+       for. "计入" on its own tells you neither that it was phased out to zero nor
+       that an FLSA-exempt employee never had it. */
     var hint = $("otDedHint");
     if (hint) {
+      var flsa = "只有 FLSA 要求支付的加班才算：豁免（exempt）员工即使公司按 1.5 倍付了加班费，也不能扣。";
       if (!t.otDed) {
         hint.textContent = "不计入加班扣除，加班费按普通工资全额计税。";
+      } else if (!isFinite(x.otPremium)) {
+        hint.textContent = "请先填写有效的基本工资与标准年工时。";
+      } else if (!x.otYearOk) {
+        hint.textContent = "OBBBA 加班扣除只适用于 2025–2028 税年，" + Math.round(t.year) + " 年不计。";
       } else if (!(x.otPremium > 0)) {
-        hint.textContent = "当前没有加班，没有可扣除的溢价。";
+        hint.textContent = "当前没有可扣除的加班溢价（没有加班，或倍率不高于 1 倍）。" + flsa;
       } else {
-        hint.textContent = "加班溢价 " + money(x.otPremium) + "（时薪一倍以上的部分），" +
-          "本年上限退坡后为 " + money(x.otCap) + "，实际扣除 " + money(x.otDeduction) +
-          "，只作用于联邦所得税。";
+        hint.textContent = "可扣除的加班溢价 " + money(x.otPremium) + "（时薪一倍以上、至多 1.5 倍的那部分）" +
+          (x.otAllowed < x.otPremium ? "，按上限 " + money(t.otCap) + " 计" : "") +
+          (x.otReduction > 0 ? "；MAGI 超过 " + money(t.otPhase) + "，退坡扣减 " + money(x.otReduction) : "") +
+          "，实际扣除 " + money(x.otDeduction) + "，" +
+          (t.dcOtDed ? "联邦和 DC 都扣。" : "只作用于联邦所得税。") + flsa;
       }
     }
 
     var ih = $("iraHint");
     if (ih) {
-      var risky = x.ira > 0 && x.agi > 100000;
-      ih.hidden = !risky;
-      if (risky) {
-        ih.textContent = "注意：AGI 约 " + money(x.agi) +
-          "，如果你参加了公司的 401(k) 计划，这笔传统 IRA 供款很可能不可抵扣——" +
-          "上面的税额按可抵扣算，请自行核对当年的退坡区间。";
+      var phased = x.ira > 0 && t.iraCovered && x.iraMagi > t.iraPhaseLo;
+      ih.hidden = !phased;
+      if (phased) {
+        var full = x.iraDeduction >= x.ira;
+        ih.textContent = "有公司退休计划时，传统 IRA 的抵扣按 MAGI（不扣 IRA 本身）在 " +
+          money(t.iraPhaseLo) + "–" + money(t.iraPhaseHi) + " 之间退坡。你的 MAGI 约 " + money(x.iraMagi) + "，" +
+          (full ? "可抵扣额度降到 " + money(x.iraCap) + "，这笔供款仍然全部可抵扣。"
+                : (x.iraDeduction > 0 ? "只能抵扣 " + money(x.iraDeduction) + "，其余不可抵扣" : "这笔供款不可抵扣") +
+                  "；税额已按此计算，不可抵扣的部分照样从到手里扣掉。");
       }
     }
+
+    /* Over a limit is not necessarily wrong — catch-up contributions are legal —
+       so the figure is used as typed and the page says what it would take. Over
+       the wages, though, is never a real payslip. */
+    var cw = [], yr = Math.round(t.year);
+    if (x.k401 > t.c401kLimit) cw.push("401(k) 供款超过 " + yr + " 年上限 " + money(t.c401kLimit) +
+      "：超出部分只有 50 岁以上的追加供款（catch-up）才成立，页面按你填的数计算。");
+    if (x.hsa > t.hsaLimit) cw.push("HSA 供款超过上限 " + money(t.hsaLimit) + "：只有家庭计划或 55 岁以上的追加供款才可能更高，页面按你填的数计算。");
+    if (x.ira > t.iraLimit) cw.push("IRA 供款超过上限 " + money(t.iraLimit) + "：可抵扣的部分以上限为准；50 岁以上有追加额度，请把「IRA 上限」改成对应数字。");
+    if (x.k401 + x.hsa + x.ira > x.wages)
+      cw.push("供款合计 " + money(tx.k401 + tx.hsa + tx.ira) + " 超过了总现金薪酬 " + money(wages) + "，到手成了负数——请检查供款或工资。");
+    var ch = $("contribHint");
+    if (ch) {
+      ch.hidden = !cw.length;
+      ch.textContent = cw.join(" ");
+    }
+    var cwText = cw.join(" ");
+    if (cwText && cwText !== lastContribWarn) announce(cwText);
+    lastContribWarn = cwText;
+  }
+
+  /* The compact title echo in the top bar carries live figures instead of
+     repeating the page title: the assumptions sit far below the results, and
+     this keeps an answer on screen while you edit them. */
+  function renderTopbarLive(c, tx) {
+    var el = $("topbarTitle");
+    if (!el) return;
+    /* Whole dollars regardless of 精确: it is a glance readout in 13px of bar, and
+       with cents the take-home alone no longer fits a phone. */
+    var d = displayOf(c, state.a);
+    function whole(v) { return isFinite(v) ? (v < 0 ? "-$" : "$") + nf(0).format(Math.abs(Math.round(v))) : "—"; }
+    el.innerHTML = '<span class="tl-total"><span class="tl-lab">总薪酬包 </span>' + esc(whole(d.total)) +
+      '<span class="tl-sep"> · </span></span><span class="tl-take"><span class="tl-lab2">到手 </span>' +
+      esc(whole(tx.home)) + "</span>";
   }
 
   /* ---------- the one render entry point ---------- */
 
   function render() {
-    var c = compute(state.a, state.h);
+    var c = compute(state.a, state.h), tx = taxDisplay(c);
     renderDial();
-    renderNumbers(c);
+    renderNumbers(c, tx);
     renderWarnings();
     renderMix();
-    renderSchedule(schedule(state.a));
+    renderSchedule();
     renderReverse();
-    renderTax(c);
-    /* After BOTH tbodies have been rebuilt, not inside either one: markCurrent
-       marks every .table, and running it from renderSchedule meant the reverse
-       table's rows were replaced a moment later and never got the highlight. */
+    renderTax(c, tx);
+    renderBracketHints();
+    renderTopbarLive(c, tx);
+    /* After every tbody has been (re)built, not inside any one of them:
+       markCurrent marks rows across tables. */
     markCurrent();
     restoreJumpFocus();
     save();
@@ -4257,7 +4827,7 @@ svg.chart:empty{display:none}
   var NATIVE = !!(window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.app);
 
   function tableText(sep) {
-    var a = state.a, rows = schedule(a), r = rates(a), out = [];
+    var a = state.a, t = state.t, rows = schedule(a), r = rates(a), out = [];
     /* A field holding the separator, a quote or a newline has to be quoted, or the
        importer silently splits one cell into two. Cheap here, invisible when missing. */
     function cell(v) {
@@ -4265,6 +4835,11 @@ svg.chart:empty{display:none}
       return /["\n\r]/.test(s) || s.indexOf(sep) !== -1 ? '"' + s.replace(/"/g, '""') + '"' : s;
     }
     function line(arr) { out.push(arr.map(cell).join(sep)); }
+    /* Every column labelled "%" carries percentage points (5 = 5%), never a
+       fraction under a % label — pasted into a sheet, 0.05 under "(%)" reads as a
+       twentieth of a percent. */
+    function pp(v) { return r6(v * 100); }
+    var cNow = compute(a, state.h), xx = computeTax(cNow, a, t);
     line(["加班与总薪酬测算"]);
     line([]);
     line(["假设"]);
@@ -4272,55 +4847,64 @@ svg.chart:empty{display:none}
     line(["标准年工时 (h)", a.stdHours]);
     line(["加班倍率 (x)", a.otMult]);
     line(["年终奖 ($/yr)", a.bonus]);
-    line(["401(k) 雇主匹配 (%)", a.matchPct]);
+    line(["401(k) 雇主匹配 (%)", pp(a.matchPct)]);
     line(["401(k) 匹配计算基数", a.matchOT ? "基本工资 + 加班费（原表口径）" : "仅基本工资"]);
-    line(["利润分享 (% of base)", a.profitPct]);
+    line(["利润分享 (% of base)", pp(a.profitPct)]);
     line(["通讯补贴 ($/yr)", a.stipend]);
     line(["PTO (h/yr)", a.ptoHours]);
-    line(["标准时薪 ($/h)", r.stdHourly]);
-    line(["加班时薪 ($/h)", r.otHourly]);
+    line(["标准时薪 ($/h)", r6(r.stdHourly)]);
+    line(["加班时薪 ($/h)", r6(r.otHourly)]);
     line(["工作周数（扣除 PTO）", r2(workWeeks(a))]);
-    var cNow = compute(a, state.h);
     line(["实际工作小时（含加班）", r2(cNow.workedHours)]);
     line(["实际时薪 ($/h)", r2(cNow.effHourly)]);
     line([]);
-    line(["加班 (h)", "加班费", "变动薪酬", "等效年终奖", "总现金薪酬", "401(k) 匹配", "利润分享", "通讯补贴", "总薪酬包"]);
+    line(["加班 (h)", "加班费", "变动薪酬", "等效年终奖 (%)", "总现金薪酬", "401(k) 匹配", "利润分享", "通讯补贴", "总薪酬包"]);
     rows.forEach(function (x) {
-      line([x.h, r2(x.otPay), r2(x.variable), r6(x.eqBonus), r2(x.cash), r2(x.match), r2(x.profit), r2(x.stipend), r2(x.total)]);
+      line([x.h, r2(x.otPay), r2(x.variable), r6(x.eqBonus * 100), r2(x.cash), r2(x.match), r2(x.profit), r2(x.stipend), r2(x.total)]);
     });
     line([]);
-    var t = state.t, cNow2 = compute(a, state.h), xx = computeTax(cNow2, a, t);
-    line(["税后（" + t.year + " 税表，单身，标准扣除）"]);
+    line(["税后（" + Math.round(t.year) + " 税表，单身，标准扣除）"]);
     line(["加班小时", state.h]);
     line(["总现金薪酬", r2(xx.wages)]);
     line(["401(k) 员工供款", r2(xx.k401)]);
     line(["HSA 供款" + (t.hsaPayroll ? "（工资扣除）" : "（非工资扣除）"), r2(xx.hsa)]);
     line(["传统 IRA 供款", r2(xx.ira)]);
+    line(["其中可抵扣的 IRA", r2(xx.iraDeduction)]);
     line(["AGI", r2(xx.agi)]);
     line(["OBBBA 加班扣除" + (t.otDed ? "" : "（未计入）"), r2(xx.otDeduction)]);
     line(["联邦应税所得", r2(xx.fedTaxable)]);
     line(["联邦所得税", r2(xx.fedTax)]);
-    line(["DC 应税所得", r2(xx.dcTaxable)]);
+    line(["DC 应税所得" + (t.dcOtDed ? "（扣加班扣除）" : "（不扣加班扣除）"), r2(xx.dcTaxable)]);
     line(["DC 所得税", r2(xx.dcTax)]);
     line(["FICA" + (t.fica ? "" : "（未计入）"), r2(xx.fica)]);
     line(["到手现金", r2(xx.takeHome)]);
-    line(["税后实际时薪 ($/h)", r2(xx.takeHome / cNow2.workedHours)]);
-    line(["每加班小时税后净得 ($/h)", r2(cNow2.otHourly * (1 - marginalRate(cNow2, a, t)))]);
+    line(["税后实际时薪 ($/h)", r2(xx.takeHome / cNow.workedHours)]);
+    line(["每加班小时税后净得 ($/h)", r2(otNetPerHour(a, t, state.h))]);
     line(["税后每工作周 ($)", r2(xx.takeHome / workWeeks(a))]);
     line([]);
     line(["反查：目标等效年终奖 → 需要加班小时"]);
-    line(["目标 %", "需要加班 (h)"]);
-    for (var p = 10; p <= 50; p += 5) line([p / 100, hoursForTarget(a, p / 100)]);
+    line(["目标 (%)", "需要加班 (h)"]);
+    for (var p = 10; p <= 50; p += 5) line([p, r6(hoursForTarget(a, p / 100))]);
+    /* The target the user actually typed, which is usually not on the 5% grid. */
+    if ([10, 15, 20, 25, 30, 35, 40, 45, 50].indexOf(state.target) === -1)
+      line([r6(state.target), r6(hoursForTarget(a, state.target / 100))]);
     return out.join("\n");
   }
   function r2(v) { return isFinite(v) ? Math.round(v * 100) / 100 : ""; }
   function r6(v) { return isFinite(v) ? Math.round(v * 1e6) / 1e6 : ""; }
 
+  /* A date, not the salary: a file name is visible wherever the file is — a
+     Downloads list, an attachment chip, a shared folder — without being opened. */
+  function exportName() {
+    var d = new Date(), z = function (n) { return (n < 10 ? "0" : "") + n; };
+    return "OT_Compensation_" + d.getFullYear() + "-" + z(d.getMonth() + 1) + "-" + z(d.getDate()) + ".csv";
+  }
+
   function exportCSV() {
     /* The BOM is what makes Excel open a UTF-8 CSV with Chinese headers without
        mangling them. Both paths get it, so the file is identical either way. */
-    var text = "﻿" + tableText(",");
-    var name = "OT_Compensation_" + nf(0).format(state.a.base).replace(/,/g, "") + ".csv";
+    var text = "\ufeff" + tableText(",");
+    var name = exportName();
     if (NATIVE) {
       window.webkit.messageHandlers.app.postMessage({ type: "saveFile", name: name, data: text });
       return;
@@ -4332,16 +4916,16 @@ svg.chart:empty{display:none}
       a.href = url; a.download = name;
       document.body.appendChild(a); a.click(); a.remove();
       setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
-      UIKit.toast("已导出 " + name);
+      toast("已导出 " + name);
     } catch (e) {
-      UIKit.toast("导出失败：" + e.message, true);
+      toast("导出失败：" + e.message, true);
     }
   }
 
   function copyTable() {
     var text = tableText("\t");
-    var done = function () { UIKit.toast("表格已复制，可直接粘进 Excel。"); };
-    var fail = function () { UIKit.toast("复制失败，请改用导出 CSV。", true); };
+    var done = function () { toast("表格已复制，可直接粘进 Excel。"); };
+    var fail = function () { toast("复制失败，请改用导出 CSV。", true); };
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(text).then(done, fail);
       return;
@@ -4386,6 +4970,9 @@ svg.chart:empty{display:none}
     var root = document.documentElement.cloneNode(true);
     [].forEach.call(root.querySelectorAll("script,link[rel=stylesheet],.ui-select-menu,.toast"),
       function (n) { n.parentNode.removeChild(n); });
+    /* The large title fades while it is echoed in the bar — scroll state, and
+       printing always starts scrolled, so it would print at 30% grey. */
+    [].forEach.call(root.querySelectorAll(".echoed"), function (n) { n.classList.remove("echoed"); });
     /* The disclosure is the exhibit's footnotes; on paper they are not optional. */
     [].forEach.call(root.querySelectorAll("details"), function (d) { d.setAttribute("open", "open"); });
 
@@ -4508,7 +5095,7 @@ svg.chart:empty{display:none}
        the host assembles exactly this string. */
     snapshot: snapshotHTML,
     reset: doReset,
-    toast: function (m, bad) { UIKit.toast(m, !!bad); }
+    toast: function (m, bad) { toast(m, !!bad); }
   };
 
   /* ---------- input handling ---------- */
@@ -4537,14 +5124,24 @@ svg.chart:empty{display:none}
     render();
   }
 
+  /* The defaults are example figures, not the workbook's: say so, and make the
+     reset undoable — it overwrites whatever real numbers were typed in. */
   function doReset() {
+    var before = { a: clone(state.a), h: state.h, target: state.target };
     state.a = clone(DEFAULTS);
     state.h = 250;
     state.target = 25;
     if (els.revPct) els.revPct.value = "25";
     renderAssumptions();
     render();
-    UIKit.toast("已恢复原表的默认假设。");
+    toast("已恢复默认示例值——10 秒内可以按旁边的「撤销」撤回。");
+    offerUndo("resetUndo", "resetBtn", function () {
+      state.a = before.a; state.h = before.h; state.target = before.target;
+      if (els.revPct) els.revPct.value = String(state.target);
+      renderAssumptions();
+      render();
+      toast("已撤销恢复。");
+    });
   }
 
   /* ---------- wiring ---------- */
@@ -4553,11 +5150,14 @@ svg.chart:empty{display:none}
   renderAssumptions();
   if (els.revPct) els.revPct.value = String(state.target);
 
-  UIKit.chrome({ titleSlot: "#topbarTitle" });
+  /* The kit echoes the page title into a HIDDEN slot; that is what drives
+     .title-shown. The visible compact slot (#topbarTitle) carries live figures
+     instead, written by renderTopbarLive — see there. */
+  UIKit.chrome({ titleSlot: "#topbarEcho" });
 
-  /* UIKit.chrome() re-measures --topbar-h on window resize only. This bar also
-     changes height on its OWN: at narrow widths the compact title echo appears and
-     the toolbar wraps to a second line, and nothing fires a resize for that.
+  /* UIKit.chrome() re-measures --topbar-h on window resize only. This bar can
+     also change height on its OWN (the compact slot appearing, a font loading),
+     and nothing fires a resize for that.
      Measured in a real browser at 390px wide: the bar went 55 -> 95px while
      --topbar-h stayed at 55, and the sub-bar — pinned at calc(--topbar-h - 1px) —
      tucked 41px UNDER the top bar, hiding the quick-jump buttons entirely
@@ -4596,6 +5196,7 @@ svg.chart:empty{display:none}
   UIKit.segmented("#matchBaseToggle");
   UIKit.segmented("#ficaToggle");
   UIKit.segmented("#otDedToggle");
+  UIKit.segmented("#dcOtDedToggle");
   UIKit.watchSliders();
   UIKit.edgeFade("#subbarScroll");   // the quick-jump bar scrolls sideways on a phone
   UIKit.popover();
@@ -4634,6 +5235,9 @@ svg.chart:empty{display:none}
     markCurrent();
     save();
   });
+  /* A value the model refused (empty, negative) must not stay on screen next to
+     a result computed from something else. */
+  on(els.revPct, "blur", function () { this.value = String(state.target); });
 
   /* Segmented controls: UIKit.segmented drives the THUMB only — switching
      aria-pressed is the app's job (SKILL.md, "这些要你自己写"). */
@@ -4665,12 +5269,14 @@ svg.chart:empty{display:none}
         if (this.value === "") return;              // mid-typing
         var v = Number(this.value);
         if (!isFinite(v) || v < 0) return;
-        state.t[key] = v;
-        if (key === "year") txt("taxYearTag", String(Math.round(v)) + " 税率");
-        if (key === "c401kLimit" || key === "hsaLimit" || key === "iraLimit") renderTaxInputs();
+        /* A year is a label: stored whole, so the tag, the CSV header and the
+           2025-2028 overtime-deduction window all read the same year. */
+        state.t[key] = key === "year" ? Math.round(v) : v;
+        if (key === "year" || key === "c401kLimit" || key === "hsaLimit" || key === "iraLimit") renderTaxFields();
         render();
       });
-      on($(id), "blur", function () { renderTaxInputs(); });
+      /* Fields only — never the bracket rows (see renderTaxFields). */
+      on($(id), "blur", function () { renderTaxFields(); });
     }(tid, TAX_FIELDS[tid]));
   }
 
@@ -4678,13 +5284,17 @@ svg.chart:empty{display:none}
     state.t.hsaPayroll = this.checked ? 1 : 0;
     render();
   });
+  on($("cIraCovered"), "change", function () {
+    state.t.iraCovered = this.checked ? 1 : 0;
+    render();
+  });
 
-  [["ficaToggle", "fica"], ["otDedToggle", "otDed"]].forEach(function (x) {
+  [["ficaToggle", "fica"], ["otDedToggle", "otDed"], ["dcOtDedToggle", "dcOtDed"]].forEach(function (x) {
     on($(x[0]), "click", function (e) {
       var b = e.target.closest("button");
       if (!b) return;
       state.t[x[1]] = b.getAttribute("data-on") === "1" ? 1 : 0;
-      renderTaxInputs();
+      renderTaxFields();
       render();
     });
   });
@@ -4710,6 +5320,27 @@ svg.chart:empty{display:none}
     render();
   });
 
+  /* Leaving a bracket cell puts the model's value back into it. Without this a
+     cleared or negative rate stayed on screen while the tax went on using the
+     old one. */
+  on($("secTax"), "focusout", function (e) {
+    var el = e.target;
+    if (!el.getAttribute || !el.getAttribute("data-br")) return;
+    var row = state.t[el.getAttribute("data-br")][Number(el.getAttribute("data-i"))];
+    if (!row) return;
+    var v = el.getAttribute("data-f") === "top" ? row[0] : row[1];
+    el.value = v === null ? "" : String(v);
+  });
+
+  /* After the rows are rebuilt the control that was used is gone; hand focus to
+     the nearest thing that still means the same place. */
+  function focusBracket(key, i, sel) {
+    var t = $(key), rows = t && t.tBodies[0].rows;
+    if (!rows || !rows.length) return;
+    var el = rows[Math.max(0, Math.min(i, rows.length - 1))].querySelector(sel);
+    if (el) el.focus();
+  }
+
   on($("secTax"), "click", function (e) {
     var del = e.target.closest ? e.target.closest(".br-del") : null;
     if (del) {
@@ -4718,6 +5349,7 @@ svg.chart:empty{display:none}
         state.t[key].splice(i, 1);
         renderTaxInputs();
         render();
+        focusBracket(key, i, ".br-del");
       }
       return;
     }
@@ -4729,21 +5361,35 @@ svg.chart:empty{display:none}
       var lastRate = rows.length ? rows[rows.length - 1][1] : 0;
       /* Insert BEFORE an open-ended top band, so adding a bracket never silently
          deletes the "and everything above" row. */
+      var at;
       if (lastTop === null && rows.length) {
-        rows.splice(rows.length - 1, 0, [Math.max(0, rows.length > 1 ? Number(rows[rows.length - 2][0]) + 10000 : 10000), lastRate]);
+        at = rows.length - 1;
+        rows.splice(at, 0, [Math.max(0, rows.length > 1 ? Number(rows[rows.length - 2][0]) + 10000 : 10000), lastRate]);
       } else {
+        at = rows.length;
         rows.push([null, lastRate]);
       }
       renderTaxInputs();
       render();
+      focusBracket(k, at, 'input[data-f="top"]');
     }
   });
 
+  /* The TABLE goes back to this build's defaults; what you contribute and which
+     rules apply to you stay (TAX_PERSONAL) — resetting the rates is not a reason
+     to lose your 401(k) figure. Undoable either way. */
   on($("taxResetBtn"), "click", function () {
-    state.t = cloneTax(TAX_DEFAULTS);
+    var before = M.cloneTax(state.t);
+    state.t = M.resetTaxTable(state.t);
     renderTaxInputs();
     render();
-    UIKit.toast("税表已恢复到 " + TAX_DEFAULTS.year + " 年的默认值。");
+    toast("税表已恢复到 " + TAX_DEFAULTS.year + " 年的默认值，你的供款和开关没有动；10 秒内可以撤回。");
+    offerUndo("taxUndo", "taxResetBtn", function () {
+      state.t = before;
+      renderTaxInputs();
+      render();
+      toast("已撤销恢复。");
+    });
   });
 
   on($("matchBaseToggle"), "click", function (e) {
@@ -4765,7 +5411,11 @@ svg.chart:empty{display:none}
   document.addEventListener("click", function (e) {
     if (!e.target || !e.target.closest) return;
     var b = e.target.closest(".hjump");
-    if (b) { rememberJumpFocus(b); setHours(b.getAttribute("data-h")); return; }
+    if (b) {
+      if (Number(b.getAttribute("data-h")) !== state.h) rememberJumpFocus(b);
+      setHours(b.getAttribute("data-h"));
+      return;
+    }
     var tr = e.target.closest(".table tbody tr[data-h]");
     if (tr) setHours(tr.getAttribute("data-h"));
   });
@@ -4794,22 +5444,76 @@ svg.chart:empty{display:none}
     panel.addEventListener("focusout", function (e) {
       if (!panel.contains(e.relatedTarget)) setMixHover(null);
     });
-    panel.addEventListener("keydown", function (e) {
-      if (e.key === "Escape" && mixPinned) { mixPinned = null; paintMixActive(); }
-    });
   }());
 
   /* Quick-jump bar. scrollIntoView honours html{scroll-padding-top}, which is
-     calc(--topbar-h + 48px) — so the target clears BOTH sticky bars. */
+     calc(--topbar-h + 48px) — so the target clears BOTH sticky bars. Focus moves
+     to the section's heading too, without scrolling: otherwise the page scrolled
+     but focus stayed in the bar, and the next Tab snapped back to the top. */
   [].forEach.call(document.querySelectorAll("[data-jump]"), function (b) {
     b.addEventListener("click", function () {
       var t = document.getElementById(b.getAttribute("data-jump"));
-      if (t) t.scrollIntoView({ behavior: UIKit.reduceMotion() ? "auto" : "smooth", block: "start" });
+      if (!t) return;
+      t.scrollIntoView({ behavior: UIKit.reduceMotion() ? "auto" : "smooth", block: "start" });
+      var h = t.querySelector("h2") || t;
+      h.setAttribute("tabindex", "-1");
+      try { h.focus({ preventScroll: true }); } catch (e) { /* old engines: leave focus where it was */ }
     });
   });
 
+  /* The info dot opens on hover and on focus. Escape closes it WITHOUT moving
+     focus (blurring it sent the next Tab back to the top of the page) and closes
+     a pointer-opened one too (WCAG 1.4.13); Enter/Space toggle it, as its
+     role=button promises. The class comes off again when the pointer leaves or
+     focus moves on. Escape also releases a pinned donut slice wherever focus is —
+     a slice pinned by mouse never had focus inside the chart. */
+  function popAnchors() { return [].slice.call(document.querySelectorAll(".pop-anchor")); }
+  document.addEventListener("keydown", function (e) {
+    var a = document.activeElement;
+    var onAnchor = a && a.classList && a.classList.contains("pop-anchor");
+    if (e.key === "Escape") {
+      popAnchors().forEach(function (p) {
+        if (p === a || p.matches(":hover")) p.classList.add("pop-dismissed");
+      });
+      if (mixPinned) { mixPinned = null; paintMixActive(); }
+    } else if (onAnchor && (e.key === "Enter" || e.key === " ")) {
+      e.preventDefault();
+      a.classList.toggle("pop-dismissed");
+    }
+  });
+  popAnchors().forEach(function (p) {
+    p.addEventListener("blur", function () { p.classList.remove("pop-dismissed"); });
+    p.addEventListener("mouseleave", function () { p.classList.remove("pop-dismissed"); });
+  });
+  /* The kit clamps a popover into the viewport only when it is revealed, but the
+     HIDDEN box still takes part in layout — so at 414-480px the lede's popover
+     stuck out past the right edge and the whole page scrolled sideways. Clamp
+     every one up front and again on resize. */
+  /* WebKit applies the new --hx margin but keeps the page's scrollable overflow
+     from BEFORE it (measured: box inside the viewport, scrollWidth still 478 at
+     430px) until the block CONTAINING the anchor is laid out again — re-laying
+     out the popover alone does not clear it. Same stale-layout shape as
+     forceRestyle's other cases, and the same cure, applied to that block. */
+  function clampPopovers() {
+    popAnchors().forEach(function (p) {
+      UIKit.positionPopover(p);
+      if (p.parentElement) p.parentElement.setAttribute("data-pop-host", "");
+    });
+    forceRestyle("[data-pop-host]");
+  }
+  clampPopovers();
+  window.addEventListener("resize", clampPopovers);
+
   render();
   pushTheme();
+  if (taxUpdatedFrom !== null) {
+    var NAMES = { c401k: "401(k)", hsa: "HSA" };
+    var moved = taxMoved.map(function (m) {
+      return NAMES[m[0]] + " 供款跟着上限从 " + nf(0).format(m[1]) + " 调到 " + nf(0).format(m[2]);
+    });
+    toast("税表已从 " + taxUpdatedFrom + " 年更新到 " + TAX_DEFAULTS.year + " 年的默认值" +
+      (moved.length ? "；" + moved.join("，") + "；其余供款和开关保持不变。" : "，你的供款和开关保持不变。"));
+  }
 
   /* UIKit.segmented places the thumb in a microtask, so this has to run after
      that has landed — hence the timer rather than an inline call. If it never

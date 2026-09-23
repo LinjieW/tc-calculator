@@ -3,7 +3,7 @@
 
 The app was already zero-dependency and zero-network — system fonts, no images,
 no CDN — so "shareable" is purely a matter of inlining the three stylesheets and
-the four scripts in the order the page already loads them. Nothing about the UI
+the five scripts in the order the page already loads them. Nothing about the UI
 or the behaviour changes; the same app.js runs, just from a <script> block
 instead of a <script src>.
 
@@ -47,7 +47,7 @@ def main():
     html = read("index.html")
 
     # Order is the contract, not a detail: tokens before components before app,
-    # and motion before ui before select-menu before app. Replacing each tag in
+    # and motion before ui before select-menu before model before app. Replacing each tag in
     # place preserves it without the bundler needing to know it.
     for name in ("tokens.css", "components.css", "app.css"):
         tag = '<link rel="stylesheet" href="%s">' % name
@@ -60,7 +60,7 @@ def main():
             1,
         )
 
-    for name in ("motion.js", "ui.js", "select-menu.js", "app.js"):
+    for name in ("motion.js", "ui.js", "select-menu.js", "model.js", "app.js"):
         tag = '<script src="%s"></script>' % name
         if tag not in html:
             print("missing script tag: %s" % name, file=sys.stderr)
@@ -72,8 +72,26 @@ def main():
         )
 
     # Anything still pointing outside this file would defeat the whole exercise.
-    leftovers = re.findall(r'(?:src|href)\s*=\s*"(?!#)([^"]+)"', html)
-    external = [u for u in leftovers if not u.startswith("data:")]
+    # Markup is scanned with the inlined <script> and <style> bodies cut out (app.js
+    # assigns `a.href = url` to a Blob URL, which is not a reference, and a CSS
+    # selector like a[href="x"] is not one either); CSS is scanned inside <style>
+    # blocks and style="" attributes. Case-insensitive throughout.
+    I = re.I | re.S
+    markup = re.sub(r"<script\b[^>]*>.*?</script>", "", html, flags=I)
+    styles = "".join(re.findall(r"<style\b[^>]*>(.*?)</style>", markup, flags=I))
+    markup = re.sub(r"<style\b[^>]*>.*?</style>", "", markup, flags=I)
+    styles += " ".join(a or b for a, b in re.findall(r'\bstyle\s*=\s*(?:"([^"]*)"|\'([^\']*)\')', markup, flags=I))
+    attr = r'\b(?:src|href|xlink:href|poster|data|action|formaction|srcset)\s*=\s*(?:"([^"]*)"|\'([^\']*)\'|([^\s>"\']+))'
+    refs = [a or b or c for a, b, c in re.findall(attr, markup, flags=I)]
+    # srcset holds "url 2x, url 3x"; meta refresh holds "5; url=..."
+    refs = [u.strip().split()[0] if u.strip() else u for r in refs for u in r.split(",")]
+    refs += re.findall(r'http-equiv\s*=\s*["\']?refresh[^>]*url\s*=\s*([^"\'>\s]+)', markup, flags=I)
+    refs += re.findall(r'url\(\s*["\']?([^)"\']+)', styles, flags=I)
+    refs += re.findall(r'@import\s+(?:url\()?\s*["\']?([^"\')\s;]+)', styles, flags=I)
+    refs += re.findall(r'image-set\(\s*["\']([^"\']+)', styles, flags=I)
+    from urllib.parse import unquote
+    refs = [unquote(u) for u in refs]
+    external = [u for u in refs if u and not u.startswith(("#", "data:"))]
     if external:
         print("refusing to write: still references %s" % ", ".join(sorted(set(external))), file=sys.stderr)
         return 1

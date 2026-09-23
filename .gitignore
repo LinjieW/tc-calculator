@@ -8,6 +8,11 @@ OT_Compensation_Total_Package_Exhibit.xlsx
 截图-*.png
 *-screenshot.png
 
+# Exports and print snapshots carry the figures that were on screen too.
+*.csv
+*.pdf
+*-打印.html
+
 # ---- build output ------------------------------------------------------------
 # NOTE: ./index.html is deliberately NOT ignored — it is the generated bundle and
 # GitHub Pages serves it, so it has to be committed. .github/workflows checks it

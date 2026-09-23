@@ -41,7 +41,10 @@ final class Harness: NSObject, WKNavigationDelegate {
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         // Let the page's own init settle (springs place, first render runs).
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-            self.web.evaluateJavaScript(self.js) { _, err in
+            // `void 0` last, so the completion value is always serialisable: a script
+            // whose last expression is an async IIFE returns a Promise, which
+            // WebKit reports as an error and the run never got polled.
+            self.web.evaluateJavaScript(self.js + "\n;void 0") { _, err in
                 if let e = err {
                     fail("JS threw while starting checks: \(e)")
                 }
@@ -70,6 +73,13 @@ final class Harness: NSObject, WKNavigationDelegate {
         web.evaluateJavaScript("window.__RESULT || null") { value, _ in
             if let s = value as? String {
                 print(s)
+                // Fail loudly: a script (or CI) running this must not have to parse
+                // the JSON to learn that checks failed.
+                if let data = s.data(using: .utf8),
+                   let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                   let pass = obj["pass"] as? Bool, !pass {
+                    exit(1)
+                }
                 exit(0)
             }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { self.poll() }
@@ -81,6 +91,21 @@ let app = NSApplication.shared
 app.setActivationPolicy(.accessory)
 
 let cfg = WKWebViewConfiguration()
+
+// Keep the page's timers running when the window is not visible — behind other
+// windows, on another Space, or with the screen LOCKED. WebKit throttles and then
+// suspends DOM timers of a hidden page, so an asynchronous check script simply
+// stops at its next setTimeout and the run times out. These are private WKPreferences
+// setters (present since macOS 10.13); each is called only if it exists, with nil as
+// the BOOL argument (= NO). The process-level App Nap assertion covers this process.
+for name in ["_setHiddenPageDOMTimerThrottlingEnabled:",
+             "_setHiddenPageDOMTimerThrottlingAutoIncreases:",
+             "_setPageVisibilityBasedProcessSuppressionEnabled:"] {
+    let sel = NSSelectorFromString(name)
+    if cfg.preferences.responds(to: sel) { _ = cfg.preferences.perform(sel, with: nil) }
+}
+let activity = ProcessInfo.processInfo.beginActivity(
+    options: [.userInitiated, .idleSystemSleepDisabled], reason: "WKWebView acceptance checks")
 let web = WKWebView(frame: NSRect(x: 0, y: 0, width: width, height: height), configuration: cfg)
 let harness = Harness(web: web, js: jsSource)
 web.navigationDelegate = harness
