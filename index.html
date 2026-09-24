@@ -1513,7 +1513,7 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
   text-underline-offset:3px}
 
 /* ---- top bar live readout ----
-   The compact slot shows the two answers instead of re-printing the page title
+   The compact slot shows live answers instead of re-printing the page title
    (renderTopbarLive). The labels are quieter than the figures. */
 .topbar-title .tl-lab,.topbar-title .tl-lab2{color:var(--label-2);font-weight:500}
 .topbar-title .tl-sep{color:var(--label-3)}
@@ -1522,6 +1522,12 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 .topbar.title-shown .topbar-title{display:flex;min-width:0}
 .topbar-title .tl-total{min-width:0;overflow:hidden;text-overflow:ellipsis}
 .topbar-title .tl-take{flex:0 0 auto}
+.topbar-title .tl-rate{flex:0 0 auto}
+.topbar.title-shown .topbar-title{max-width:none;flex:1 1 auto}
+@media (max-width:820px){
+  .topbar.title-shown .topbar-brand{display:none}
+  .topbar.title-shown .topbar-title{padding-left:0;font-size:13.5px}
+}
 
 /* Headings for structure, the kit's panel/sub-label typography for looks. The
    kit's reset already zeroes their margins; tabindex=-1 is set only so the
@@ -1782,20 +1788,28 @@ svg.chart:empty{display:none}
   .rev-row{grid-template-columns:minmax(0,1fr)}
   .tax-grid{grid-template-columns:minmax(0,1fr);gap:var(--space-4)}
   .col{padding:22px var(--space-4) 64px}
+  /* Keep the chrome and page on the same reading spine after stacking. */
+  .col,.topbar-inner,.subbar-inner{
+    padding-left:max(var(--space-4),env(safe-area-inset-left));
+    padding-right:max(var(--space-4),env(safe-area-inset-right))}
 }
 @media (max-width:560px){
+  /* Nested tax bands have less space than the full-width summary band. */
+  .metric{padding-left:12px;padding-right:12px}
+  .metric-band .metric .val{font-size:clamp(20px,5.6vw,24px)}
   .assume-grid{grid-template-columns:minmax(0,1fr)}
   .assume-grid .segmented{display:flex}
   .assume-grid .segmented button{flex:1;min-width:0;white-space:normal}
   .dial-fields{grid-template-columns:minmax(0,1fr)}
   .topbar-tools{gap:var(--space-2)}
-  /* One row, always. The live readout takes the brand's place instead of
-     wrapping the bar to two lines — a wrap made the whole page jump ~20px the
-     moment it appeared. */
-  .topbar-inner{flex-wrap:nowrap}
+  /* Three compact readout lines beside the controls. Reserve the same height
+     before collapse, so revealing the figures does not move the page. */
+  .topbar-inner{flex-wrap:nowrap;min-height:63px}
   .topbar.title-shown .topbar-brand{display:none}
-  .topbar.title-shown .topbar-title{max-width:none;flex:1 1 auto;min-width:0;padding-left:0;font-size:13.5px}
-  .topbar-title .tl-lab{display:none}
+  .topbar.title-shown .topbar-title{max-width:none;flex:1 1 auto;min-width:0;padding-left:0;
+    flex-direction:column;align-items:flex-start;font-size:13px;line-height:15px}
+  .topbar-title .tl-sep{display:none}
+  .topbar-title .tl-total{flex-shrink:0;max-width:100%}
   /* The readout takes the squeeze, never the controls: a squeezed 整数/精确
      wrapped to two lines and grew the bar by 10px. */
   .topbar-tools{flex:0 0 auto}
@@ -1804,9 +1818,12 @@ svg.chart:empty{display:none}
 /* The smallest phones: the four-up tax band and the tables were a few px too
    wide at 320 in 精确 mode. */
 @media (max-width:360px){
-  /* Room for one figure only: the take-home, whole, rather than both clipped. */
-  .topbar-title .tl-total{display:none}
+  .hero-grid .stat .big{font-size:32px}
+  .metric{padding-left:10px;padding-right:10px}
   .metric-band .metric .val{font-size:20px}
+  #secTax .metric-band{grid-template-columns:minmax(0,1fr)}
+  #secTax .metric{border-left:none}
+  #secTax .metric + .metric{border-top:.5px solid var(--separator)}
   .table th,.table td{padding-left:6px;padding-right:6px}
 }
 
@@ -2036,7 +2053,7 @@ svg.chart:empty{display:none}
       </div>
       <ul class="mix-legend tnum" id="mixLegend"></ul>
     </div>
-    <p class="panel-note" id="mixDesc">各块之和严格等于中间的总薪酬包。「PTO」是从基本工资里切出来的——两块加起来才是全额基本工资，不是额外的钱。指向或点按任意一块（或旁边列表里的行，也可以用键盘聚焦），那一块会弹出来、其余变暗；点一下钉住，再点一次或按 Esc 取消。</p>
+    <p class="panel-note" id="mixDesc">各块之和严格等于中间的总薪酬包。「PTO」是从基本工资里切出来的——两块加起来才是全额基本工资，不是额外的钱。指向或点按任意一块（或旁边列表里的行，也可以用键盘聚焦），那一块会弹出来、其余变暗；点一下钉住，再点一次、点空白处或按 Esc 取消。</p>
   </section>
 
   <!-- ============ 税后 ============ -->
@@ -4476,8 +4493,14 @@ svg.chart:empty{display:none}
   }
 
   function setMixHover(key) { mixHover = key; paintMixActive(); }
+  function clearMixSelection() {
+    mixPinned = null;
+    mixHover = null;
+    paintMixActive();
+  }
   function toggleMixPin(key) {
-    mixPinned = mixPinned === key ? null : key;
+    if (mixPinned === key) { clearMixSelection(); return; }
+    mixPinned = key;
     paintMixActive();
   }
 
@@ -4799,7 +4822,9 @@ svg.chart:empty{display:none}
     function whole(v) { return isFinite(v) ? (v < 0 ? "-$" : "$") + nf(0).format(Math.abs(Math.round(v))) : "—"; }
     el.innerHTML = '<span class="tl-total"><span class="tl-lab">总薪酬包 </span>' + esc(whole(d.total)) +
       '<span class="tl-sep"> · </span></span><span class="tl-take"><span class="tl-lab2">到手 </span>' +
-      esc(whole(tx.home)) + "</span>";
+      esc(whole(tx.home)) + '</span><span class="tl-rate"><span class="tl-sep"> · </span>' +
+      '<span class="tl-lab2">有效税率 </span><span class="tl-rate-val">' +
+      esc(tx.wages > 0 ? pct(tx.taxSum / tx.wages) : "—") + '</span></span>';
   }
 
   /* ---------- the one render entry point ---------- */
@@ -5428,12 +5453,18 @@ svg.chart:empty{display:none}
 
     panel.addEventListener("mouseover", function (e) {
       var t = e.target.closest ? e.target.closest(".mix-slice, .mix-row") : null;
-      if (t) setMixHover(t.getAttribute("data-key"));
+      setMixHover(t ? t.getAttribute("data-key") : null);
     });
     panel.addEventListener("mouseleave", function () { setMixHover(null); });
     panel.addEventListener("click", function (e) {
       var t = e.target.closest ? e.target.closest(".mix-slice, .mix-row") : null;
       if (t) toggleMixPin(t.getAttribute("data-key"));
+    });
+    // Includes the donut centre, card whitespace and the rest of the page.
+    // Keep the clicked control's own action and normal focus behaviour intact.
+    document.addEventListener("click", function (e) {
+      var t = e.target.closest ? e.target.closest(".mix-slice, .mix-row") : null;
+      if (!t && (mixPinned || mixHover)) clearMixSelection();
     });
     /* Focus is the keyboard's hover. focusout clears only when focus has actually
        left the panel, not while it moves between two rows. */
@@ -5475,7 +5506,7 @@ svg.chart:empty{display:none}
       popAnchors().forEach(function (p) {
         if (p === a || p.matches(":hover")) p.classList.add("pop-dismissed");
       });
-      if (mixPinned) { mixPinned = null; paintMixActive(); }
+      if (mixPinned || mixHover) clearMixSelection();
     } else if (onAnchor && (e.key === "Enter" || e.key === " ")) {
       e.preventDefault();
       a.classList.toggle("pop-dismissed");

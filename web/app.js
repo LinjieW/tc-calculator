@@ -561,8 +561,14 @@
   }
 
   function setMixHover(key) { mixHover = key; paintMixActive(); }
+  function clearMixSelection() {
+    mixPinned = null;
+    mixHover = null;
+    paintMixActive();
+  }
   function toggleMixPin(key) {
-    mixPinned = mixPinned === key ? null : key;
+    if (mixPinned === key) { clearMixSelection(); return; }
+    mixPinned = key;
     paintMixActive();
   }
 
@@ -884,7 +890,9 @@
     function whole(v) { return isFinite(v) ? (v < 0 ? "-$" : "$") + nf(0).format(Math.abs(Math.round(v))) : "—"; }
     el.innerHTML = '<span class="tl-total"><span class="tl-lab">总薪酬包 </span>' + esc(whole(d.total)) +
       '<span class="tl-sep"> · </span></span><span class="tl-take"><span class="tl-lab2">到手 </span>' +
-      esc(whole(tx.home)) + "</span>";
+      esc(whole(tx.home)) + '</span><span class="tl-rate"><span class="tl-sep"> · </span>' +
+      '<span class="tl-lab2">有效税率 </span><span class="tl-rate-val">' +
+      esc(tx.wages > 0 ? pct(tx.taxSum / tx.wages) : "—") + '</span></span>';
   }
 
   /* ---------- the one render entry point ---------- */
@@ -1513,12 +1521,18 @@
 
     panel.addEventListener("mouseover", function (e) {
       var t = e.target.closest ? e.target.closest(".mix-slice, .mix-row") : null;
-      if (t) setMixHover(t.getAttribute("data-key"));
+      setMixHover(t ? t.getAttribute("data-key") : null);
     });
     panel.addEventListener("mouseleave", function () { setMixHover(null); });
     panel.addEventListener("click", function (e) {
       var t = e.target.closest ? e.target.closest(".mix-slice, .mix-row") : null;
       if (t) toggleMixPin(t.getAttribute("data-key"));
+    });
+    // Includes the donut centre, card whitespace and the rest of the page.
+    // Keep the clicked control's own action and normal focus behaviour intact.
+    document.addEventListener("click", function (e) {
+      var t = e.target.closest ? e.target.closest(".mix-slice, .mix-row") : null;
+      if (!t && (mixPinned || mixHover)) clearMixSelection();
     });
     /* Focus is the keyboard's hover. focusout clears only when focus has actually
        left the panel, not while it moves between two rows. */
@@ -1560,7 +1574,7 @@
       popAnchors().forEach(function (p) {
         if (p === a || p.matches(":hover")) p.classList.add("pop-dismissed");
       });
-      if (mixPinned) { mixPinned = null; paintMixActive(); }
+      if (mixPinned || mixHover) clearMixSelection();
     } else if (onAnchor && (e.key === "Enter" || e.key === " ")) {
       e.preventDefault();
       a.classList.toggle("pop-dismissed");

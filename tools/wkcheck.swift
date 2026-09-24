@@ -91,6 +91,8 @@ let app = NSApplication.shared
 app.setActivationPolicy(.accessory)
 
 let cfg = WKWebViewConfiguration()
+// Acceptance resets the controls; never share a persistent store with real use.
+cfg.websiteDataStore = .nonPersistent()
 
 // Keep the page's timers running when the window is not visible — behind other
 // windows, on another Space, or with the screen LOCKED. WebKit throttles and then

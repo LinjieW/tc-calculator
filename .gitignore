@@ -25,3 +25,6 @@ build/
 .DS_Store
 __pycache__/
 *.pyc
+
+# Local UI audit captures and raw runs; durable summary lives in docs/.
+artifacts/ui-polish/

@@ -62,7 +62,9 @@ final class S: NSObject, WKNavigationDelegate {
 
 let app = NSApplication.shared
 app.setActivationPolicy(.accessory)
-let web = WKWebView(frame: NSRect(x: 0, y: 0, width: w, height: h), configuration: WKWebViewConfiguration())
+let cfg = WKWebViewConfiguration()
+cfg.websiteDataStore = .nonPersistent()
+let web = WKWebView(frame: NSRect(x: 0, y: 0, width: w, height: h), configuration: cfg)
 let s = S(web)
 web.navigationDelegate = s
 let win = NSWindow(contentRect: NSRect(x: 0, y: 0, width: w, height: h),

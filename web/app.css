@@ -37,7 +37,7 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
   text-underline-offset:3px}
 
 /* ---- top bar live readout ----
-   The compact slot shows the two answers instead of re-printing the page title
+   The compact slot shows live answers instead of re-printing the page title
    (renderTopbarLive). The labels are quieter than the figures. */
 .topbar-title .tl-lab,.topbar-title .tl-lab2{color:var(--label-2);font-weight:500}
 .topbar-title .tl-sep{color:var(--label-3)}
@@ -46,6 +46,12 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 .topbar.title-shown .topbar-title{display:flex;min-width:0}
 .topbar-title .tl-total{min-width:0;overflow:hidden;text-overflow:ellipsis}
 .topbar-title .tl-take{flex:0 0 auto}
+.topbar-title .tl-rate{flex:0 0 auto}
+.topbar.title-shown .topbar-title{max-width:none;flex:1 1 auto}
+@media (max-width:820px){
+  .topbar.title-shown .topbar-brand{display:none}
+  .topbar.title-shown .topbar-title{padding-left:0;font-size:13.5px}
+}
 
 /* Headings for structure, the kit's panel/sub-label typography for looks. The
    kit's reset already zeroes their margins; tabindex=-1 is set only so the
@@ -306,20 +312,28 @@ svg.chart:empty{display:none}
   .rev-row{grid-template-columns:minmax(0,1fr)}
   .tax-grid{grid-template-columns:minmax(0,1fr);gap:var(--space-4)}
   .col{padding:22px var(--space-4) 64px}
+  /* Keep the chrome and page on the same reading spine after stacking. */
+  .col,.topbar-inner,.subbar-inner{
+    padding-left:max(var(--space-4),env(safe-area-inset-left));
+    padding-right:max(var(--space-4),env(safe-area-inset-right))}
 }
 @media (max-width:560px){
+  /* Nested tax bands have less space than the full-width summary band. */
+  .metric{padding-left:12px;padding-right:12px}
+  .metric-band .metric .val{font-size:clamp(20px,5.6vw,24px)}
   .assume-grid{grid-template-columns:minmax(0,1fr)}
   .assume-grid .segmented{display:flex}
   .assume-grid .segmented button{flex:1;min-width:0;white-space:normal}
   .dial-fields{grid-template-columns:minmax(0,1fr)}
   .topbar-tools{gap:var(--space-2)}
-  /* One row, always. The live readout takes the brand's place instead of
-     wrapping the bar to two lines — a wrap made the whole page jump ~20px the
-     moment it appeared. */
-  .topbar-inner{flex-wrap:nowrap}
+  /* Three compact readout lines beside the controls. Reserve the same height
+     before collapse, so revealing the figures does not move the page. */
+  .topbar-inner{flex-wrap:nowrap;min-height:63px}
   .topbar.title-shown .topbar-brand{display:none}
-  .topbar.title-shown .topbar-title{max-width:none;flex:1 1 auto;min-width:0;padding-left:0;font-size:13.5px}
-  .topbar-title .tl-lab{display:none}
+  .topbar.title-shown .topbar-title{max-width:none;flex:1 1 auto;min-width:0;padding-left:0;
+    flex-direction:column;align-items:flex-start;font-size:13px;line-height:15px}
+  .topbar-title .tl-sep{display:none}
+  .topbar-title .tl-total{flex-shrink:0;max-width:100%}
   /* The readout takes the squeeze, never the controls: a squeezed 整数/精确
      wrapped to two lines and grew the bar by 10px. */
   .topbar-tools{flex:0 0 auto}
@@ -328,9 +342,12 @@ svg.chart:empty{display:none}
 /* The smallest phones: the four-up tax band and the tables were a few px too
    wide at 320 in 精确 mode. */
 @media (max-width:360px){
-  /* Room for one figure only: the take-home, whole, rather than both clipped. */
-  .topbar-title .tl-total{display:none}
+  .hero-grid .stat .big{font-size:32px}
+  .metric{padding-left:10px;padding-right:10px}
   .metric-band .metric .val{font-size:20px}
+  #secTax .metric-band{grid-template-columns:minmax(0,1fr)}
+  #secTax .metric{border-left:none}
+  #secTax .metric + .metric{border-top:.5px solid var(--separator)}
   .table th,.table td{padding-left:6px;padding-right:6px}
 }
 
