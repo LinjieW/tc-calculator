@@ -60,7 +60,7 @@ def main():
             1,
         )
 
-    for name in ("motion.js", "ui.js", "select-menu.js", "model.js", "app.js"):
+    for name in ("motion.js", "ui.js", "select-menu.js", "model.js", "i18n.js", "app.js"):
         tag = '<script src="%s"></script>' % name
         if tag not in html:
             print("missing script tag: %s" % name, file=sys.stderr)

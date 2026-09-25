@@ -373,7 +373,7 @@
      aria-label does the same job for AT, which loses the row/column
      relationship the moment the table becomes a stack of cards. */
   function labelCells(table) {
-    var heads = [].map.call(table.querySelectorAll("thead th"), function (th) { return th.textContent.trim(); });
+    var heads = [].map.call(table.querySelectorAll("thead th"), function (th) { return TCI18n.sourceText(th).trim(); });
     [].forEach.call(table.querySelectorAll("tbody tr"), function (row, rowIndex) {
       [].forEach.call(row.cells, function (cell, col) {
         cell.setAttribute("data-label", heads[col] || "");
@@ -927,7 +927,7 @@
       var s = v === null || v === undefined ? "" : String(v);
       return /["\n\r]/.test(s) || s.indexOf(sep) !== -1 ? '"' + s.replace(/"/g, '""') + '"' : s;
     }
-    function line(arr) { out.push(arr.map(cell).join(sep)); }
+    function line(arr) { out.push(arr.map(function (v) { return cell(TCI18n.text(v)); }).join(sep)); }
     /* Every column labelled "%" carries percentage points (5 = 5%), never a
        fraction under a % label — pasted into a sheet, 0.05 under "(%)" reads as a
        twentieth of a percent. */
@@ -1047,6 +1047,7 @@
      the live values onto their attributes first is what makes the paper match
      the screen. */
   function snapshotHTML() {
+    TCI18n.flush();
     [].forEach.call(document.querySelectorAll("input"), function (i) {
       if (i.type === "checkbox" || i.type === "radio") {
         if (i.checked) i.setAttribute("checked", "checked"); else i.removeAttribute("checked");
@@ -1532,7 +1533,7 @@
     // Keep the clicked control's own action and normal focus behaviour intact.
     document.addEventListener("click", function (e) {
       var t = e.target.closest ? e.target.closest(".mix-slice, .mix-row") : null;
-      if (!t && (mixPinned || mixHover)) clearMixSelection();
+      if (!t && !e.target.closest("#languageToggle") && (mixPinned || mixHover)) clearMixSelection();
     });
     /* Focus is the keyboard's hover. focusout clears only when focus has actually
        left the panel, not while it moves between two rows. */
@@ -1602,6 +1603,10 @@
   }
   clampPopovers();
   window.addEventListener("resize", clampPopovers);
+  window.addEventListener("languagechange", function () {
+    alignTicks();
+    clampPopovers();
+  });
 
   render();
   pushTheme();

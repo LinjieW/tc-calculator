@@ -46,6 +46,7 @@ document.documentElement.dataset.theme=t||((window.matchMedia&&matchMedia("(pref
         <button type="button" data-prec="0" aria-pressed="true">整数</button>
         <button type="button" data-prec="2" aria-pressed="false">精确</button>
       </div>
+      <button type="button" class="btn-ghost sm language-toggle" id="languageToggle" aria-label="切换到英文">EN</button>
       <button class="btn-ghost sm btn-icon" id="themeToggle" aria-label="切换深色 / 浅色主题" title="切换深色 / 浅色主题">
         <svg class="icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.4"/><path d="M8 1.6a6.4 6.4 0 0 0 0 12.8z" fill="currentColor" stroke="none"/></svg>
       </button>
@@ -497,6 +498,7 @@ document.documentElement.dataset.theme=t||((window.matchMedia&&matchMedia("(pref
 <script src="ui.js"></script>
 <script src="select-menu.js"></script>
 <script src="model.js"></script>
+<script src="i18n.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

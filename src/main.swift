@@ -146,6 +146,9 @@ final class AppController: NSObject, NSApplicationDelegate, WKNavigationDelegate
         case "print":
             openPrintSnapshot(html: (body["html"] as? String) ?? "")
 
+        case "language":
+            applyLanguage(english: (body["value"] as? String) == "en")
+
         case "theme":
             // Keep the window's own chrome (title bar, scrollbars, sheets, the
             // Dock menu's contextual bits) in the same theme as the page. Without
@@ -369,6 +372,30 @@ final class AppController: NSObject, NSApplicationDelegate, WKNavigationDelegate
 
         NSApp.mainMenu = main
         NSApp.windowsMenu = windowMenu
+    }
+
+    private func applyLanguage(english: Bool) {
+        // Rebuild the same menu actions and shortcuts, then localize their titles.
+        buildMenu()
+        window?.title = english ? "Compensation" : kAppName
+        guard english else { return }
+        let titles = [
+            "关于 \(kAppName)": "About Compensation", "恢复默认假设": "Restore Default Assumptions",
+            "隐藏 \(kAppName)": "Hide Compensation", "隐藏其他": "Hide Others", "显示全部": "Show All",
+            "退出 \(kAppName)": "Quit Compensation", "文件": "File", "导出 CSV…": "Export CSV…",
+            "复制表格": "Copy Table", "打印 / 存为 PDF…": "Print / Save as PDF…", "关闭窗口": "Close Window",
+            "编辑": "Edit", "撤销": "Undo", "重做": "Redo", "剪切": "Cut", "拷贝": "Copy", "粘贴": "Paste", "全选": "Select All",
+            "显示": "View", "切换深色 / 浅色": "Toggle Dark / Light", "实际大小": "Actual Size",
+            "放大": "Zoom In", "缩小": "Zoom Out", "重新载入": "Reload", "窗口": "Window", "最小化": "Minimize", "缩放": "Zoom"
+        ]
+        func translate(_ menu: NSMenu) {
+            menu.title = titles[menu.title] ?? menu.title
+            for item in menu.items {
+                item.title = titles[item.title] ?? item.title
+                if let sub = item.submenu { translate(sub) }
+            }
+        }
+        if let menu = NSApp.mainMenu { translate(menu) }
     }
 
     private func add(_ menu: NSMenu, _ title: String, _ action: Selector, _ key: String, _ mods: NSEvent.ModifierFlags) {
